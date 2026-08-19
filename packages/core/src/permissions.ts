@@ -1,7 +1,8 @@
 import type { PermissionPolicy, PermissionPolicyResult, PermissionRule, PermissionStore, Tool } from "./types.js";
 
-/** Safe default: reads proceed; every state-changing or external action asks. */
+/** 安全默认策略：读取操作直接放行，所有改状态或外部操作均请求确认。 */
 export class DefaultPermissionPolicy implements PermissionPolicy {
+  /** 根据风险等级和未过期规则决定放行、拒绝或请求确认。 */
   async evaluate({
     tool,
     rules,
@@ -19,14 +20,16 @@ export class DefaultPermissionPolicy implements PermissionPolicy {
   }
 }
 
-/** A deterministic in-memory store useful for CLIs, tests, and embedding hosts. */
+/** 确定性的内存规则存储，适用于 CLI、测试及嵌入式宿主。 */
 export class InMemoryPermissionStore implements PermissionStore {
   private readonly rules = new Map<string, PermissionRule>();
+  /** 校验并写入一条权限规则。 */
   async createRule(rule: PermissionRule) {
     validatePermissionRule(rule);
     this.rules.set(rule.id, rule);
     return rule;
   }
+  /** 返回仍有效且符合可选筛选条件的规则。 */
   async listRules(filter?: { workspace?: string; tool?: string }) {
     const now = Date.now();
     return [...this.rules.values()].filter(
@@ -36,12 +39,13 @@ export class InMemoryPermissionStore implements PermissionStore {
         (!filter?.workspace || rule.scope.workspace === filter.workspace),
     );
   }
+  /** 撤销指定标识的规则；不存在时不报错。 */
   async revokeRule(id: string) {
     this.rules.delete(id);
   }
 }
 
-/** Baseline validation adapters should apply before durable rule persistence. */
+/** 持久化规则前必须执行的基础安全校验。 */
 export function validatePermissionRule(rule: PermissionRule): void {
   if (
     !rule.id ||

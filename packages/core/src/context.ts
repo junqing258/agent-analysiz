@@ -1,11 +1,13 @@
 import type { AgentMessage, ContextSnapshot, ModelGateway, ModelToolDefinition } from "./types.js";
 
+/** 上下文管理器的预算与保留策略。 */
 export interface ContextManagerOptions { contextWindowTokens?: number; maxOutputTokens?: number; retainRecentMessages?: number; }
+/** 发送给模型的上下文，以及发生压缩时记录的恢复快照。 */
 export interface PreparedContext { messages: AgentMessage[]; snapshot?: ContextSnapshot; }
 
 /**
- * Budget-aware context assembler. Compression is deliberately deterministic as
- * a safe fallback; hosts may replace it with a model-backed JSON summarizer.
+ * 感知 token 预算的上下文组装器。压缩刻意采用确定性策略作为安全兜底；
+ * 宿主可替换为由模型驱动的 JSON 摘要器。
  */
 export class ContextManager {
   private readonly window: number;
@@ -16,6 +18,7 @@ export class ContextManager {
     this.output = options.maxOutputTokens ?? 4_096;
     this.retainRecent = options.retainRecentMessages ?? 8;
   }
+  /** 估算上下文；超出窗口时压缩较早的非系统消息。 */
   async prepare(messages: AgentMessage[], tools: ModelToolDefinition[]): Promise<PreparedContext> {
     const estimate = this.model.estimateTokens ? await this.model.estimateTokens({ messages, tools }) : { tokens: Math.ceil(JSON.stringify({ messages, tools }).length / 4), source: "heuristic" as const };
     if (estimate.tokens + this.output <= this.window || messages.length <= this.retainRecent + 1) return { messages };
@@ -29,6 +32,8 @@ export class ContextManager {
     return { messages: compacted, snapshot: { summary, messages: compacted, fileState: {} } };
   }
 }
+
+/** 生成用于确定性上下文摘要的简短内容预览。 */
 function contentPreview(content: AgentMessage["content"][number]): string {
   if (content.type === "text") return content.text.slice(0, 500);
   if (content.type === "tool-call") return `tool call ${content.call.name}`;

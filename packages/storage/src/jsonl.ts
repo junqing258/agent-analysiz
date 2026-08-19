@@ -2,7 +2,7 @@ import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { DurableEvent, EventStore, StoredEvent } from "@agent-sdk/core";
 
-/** Append-only, newline-delimited JSON event store. Sequence allocation is serialized. */
+/** 仅追加、以换行分隔 JSON 的事件存储；序列号分配会被串行化。 */
 export class JsonlEventStore implements EventStore {
   private sequence?: number;
   private writes: Promise<void> = Promise.resolve();

@@ -16,6 +16,7 @@ import type {
   TransportEvent,
 } from "./types.js";
 
+/** 将生产端推送的事件转换为可异步迭代消费的队列。 */
 class AsyncQueue<T> {
   private readonly items: T[] = [];
   private readonly waiters: Array<(result: IteratorResult<T>) => void> = [];
@@ -37,14 +38,15 @@ class AsyncQueue<T> {
   }
 }
 
+/** 等待外部调用方处理的权限请求。 */
 interface PendingPermission {
   resolve(decision: PermissionDecision): void;
   settled: boolean;
 }
 
 /**
- * A single-session, event-sourced Agent runtime. It never persists transport
- * deltas; append() always precedes exposing every durable event to the caller.
+ * 单会话、事件溯源的 Agent 运行时。
+ * 不持久化传输增量，且每个持久化事件都会先写入存储，再暴露给调用方。
  */
 export class AgentSession {
   readonly sessionId: string;
@@ -73,6 +75,10 @@ export class AgentSession {
       this.messages.unshift(message("system", [{ type: "text", text: options.context.system }]));
   }
 
+  /**
+   * 启动一个回合，并返回模型增量、工具进度与持久化事件组成的事件流。
+   * 单个会话同一时间只能运行一个回合。
+   */
   run(input: string | AgentMessage, options: { signal?: AbortSignal } = {}): AsyncIterable<TransportEvent> {
     if (this.active) throw new Error("A session permits only one active run()");
     this.active = true;
@@ -84,6 +90,7 @@ export class AgentSession {
     return { [Symbol.asyncIterator]: () => ({ next: () => queue.next() }) };
   }
 
+  /** 提交待处理权限请求的决策，使对应工具调用可以继续或被拒绝。 */
   async resolvePermission(requestId: string, decision: PermissionDecision): Promise<void> {
     const pending = this.pendingPermissions.get(requestId);
     if (!pending || pending.settled) throw new Error(`Permission request is not pending: ${requestId}`);
@@ -92,10 +99,12 @@ export class AgentSession {
     pending.resolve(decision);
   }
 
+  /** 返回当前会话已累积的消息历史，只读视图不允许替换消息数组。 */
   getMessages(): readonly AgentMessage[] {
     return this.messages;
   }
 
+  /** 驱动完整回合：构建上下文、流式请求模型，并按需执行工具调用。 */
   private async drive(
     input: string | AgentMessage,
     parentSignal: AbortSignal | undefined,
@@ -156,6 +165,10 @@ export class AgentSession {
     }
   }
 
+  /**
+   * 流式收集模型响应；文本和工具调用增量立即发送到队列，
+   * 完整工具调用则留待本回合后续执行。
+   */
   private async collectModelResponse(
     signal: AbortSignal,
     queue: AsyncQueue<TransportEvent>,
@@ -188,6 +201,7 @@ export class AgentSession {
     return { text, calls, finish };
   }
 
+  /** 记录工具请求、校验参数、执行调用，并把结果追加为工具消息。 */
   private async executeCall(call: ToolCall, signal: AbortSignal, queue: AsyncQueue<TransportEvent>): Promise<void> {
     await this.persist({ type: "tool.requested", call }, queue);
     const tool = this.tools.get(call.name);
@@ -206,6 +220,7 @@ export class AgentSession {
     await this.persist({ type: "message.appended", message: toolMessage }, queue);
   }
 
+  /** 根据权限策略处理拒绝、询问或放行后，在超时限制内执行工具。 */
   private async executeAuthorized(
     tool: Tool,
     call: ToolCall,
@@ -261,6 +276,7 @@ export class AgentSession {
     }
   }
 
+  /** 等待外部权限决策；超时或回合取消时清理挂起请求。 */
   private async waitForPermission(request: PermissionRequest, signal: AbortSignal): Promise<PermissionDecision> {
     const timeoutMs = Math.max(0, Date.parse(request.expiresAt) - Date.now());
     return new Promise<PermissionDecision>((resolve, reject) => {
@@ -283,6 +299,10 @@ export class AgentSession {
     });
   }
 
+  /**
+   * 限制工具结果的内联长度；超出时可将完整结果存入工件存储，
+   * 并返回可展示的预览和检索提示。
+   */
   private async controlResult(result: ToolResult): Promise<ToolResult> {
     const serialized = JSON.stringify(result);
     if (serialized.length <= this.options.maxToolResultChars) return result;
@@ -312,6 +332,7 @@ export class AgentSession {
     };
   }
 
+  /** 将当前回合标记为中断，并持久化中断原因。 */
   private async interrupt(
     reason: "aborted" | "permission-timeout" | "step-limit" | "turn-timeout",
     queue: AsyncQueue<TransportEvent>,
@@ -319,10 +340,12 @@ export class AgentSession {
     await this.setState("interrupted", queue);
     await this.persist({ type: "turn.interrupted", reason }, queue);
   }
+  /** 更新内存状态并写入对应的状态变更事件。 */
   private async setState(state: SessionState, queue: AsyncQueue<TransportEvent>): Promise<void> {
     this.state = state;
     await this.persist({ type: "session.state.changed", state }, queue);
   }
+  /** 先追加持久化事件，成功后再推送给订阅者，保证事件顺序。 */
   private async persist(event: DurableEvent, queue: AsyncQueue<TransportEvent>): Promise<void> {
     const stored = await this.options.eventStore.append(event);
     this.sequence = stored.sequence;
@@ -330,24 +353,32 @@ export class AgentSession {
   }
 }
 
+/** 创建带唯一标识和时间戳的会话消息。 */
 function message(role: AgentMessage["role"], content: AgentMessage["content"]): AgentMessage {
   return { id: `message_${randomId()}`, role, content, createdAt: now() };
 }
+/** 将工具失败信息统一转换为标准工具结果。 */
 function failure(code: string, message: string, retryable = false): ToolFailure {
   return { ok: false, error: { code, message, retryable }, content: [{ type: "text", text: `${code}: ${message}` }] };
 }
+/** 生成会话内使用的轻量随机标识符。 */
 function randomId(): string {
   return `${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
+
+/** 生成事件和消息使用的 ISO 8601 时间戳。 */
 function now(): string {
   return new Date().toISOString();
 }
+/** 在取消信号触发时立即抛出其原因，终止当前异步流程。 */
 function throwIfAborted(signal: AbortSignal): void {
   if (signal.aborted) throw signal.reason ?? new Error("aborted");
 }
+/** 区分回合超时与其他主动取消原因。 */
 function isTurnTimeout(reason: unknown): boolean {
   return reason instanceof Error && reason.message === "turn timeout";
 }
+/** 将未知异常转换为可持久化的回合错误结构。 */
 function toAgentError(error: unknown): { code: string; message: string; cause?: unknown } {
   return {
     code: "TURN_FAILED",

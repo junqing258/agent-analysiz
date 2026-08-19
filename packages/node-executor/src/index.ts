@@ -175,8 +175,8 @@ export interface BashToolOptions {
   environment?: Record<string, string>;
 }
 /**
- * Execute structured argv only. It intentionally has no shell-string input,
- * shell:false, and no inheritance of the host environment unless provided.
+ * 仅执行结构化的 argv。刻意不接受 shell 字符串输入，
+ * 固定使用 shell:false，且除非显式提供，否则不继承宿主环境变量。
  */
 export function createBashTool(workspace: string, options: BashToolOptions = {}): Tool {
   const root = resolve(workspace);

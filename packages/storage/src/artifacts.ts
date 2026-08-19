@@ -3,7 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ArtifactRef, ArtifactStore } from "@agent-sdk/core";
 
-/** Content-addressed local artifact store. The hash is both ID and integrity check. */
+/** 按内容寻址的本地工件存储；哈希既是标识符，也是完整性校验。 */
 export class LocalArtifactStore implements ArtifactStore {
   constructor(readonly root: string) {}
   async put(value: Uint8Array | string, options: { mediaType: string }): Promise<ArtifactRef> {

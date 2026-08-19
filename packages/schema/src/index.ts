@@ -1,4 +1,4 @@
-/** JSON Schema Draft 2020-12 subset accepted by Agent SDK tools. */
+/** Agent SDK 工具接受的 JSON Schema Draft 2020-12 子集。 */
 export type JsonSchema = Record<string, unknown>;
 
 export interface SchemaIssue {
@@ -19,8 +19,8 @@ export class SchemaValidationError extends Error {
 }
 
 /**
- * Validate untrusted tool input without evaluating schema extensions. Unknown
- * keywords are deliberately ignored so providers may retain display metadata.
+ * 验证不可信的工具输入，但不解析 Schema 扩展。刻意忽略未知关键字，
+ * 以便提供方保留用于展示的元数据。
  */
 export function validateJsonSchema(schema: JsonSchema, value: unknown): ValidationResult {
   const issues: SchemaIssue[] = [];
@@ -28,11 +28,13 @@ export function validateJsonSchema(schema: JsonSchema, value: unknown): Validati
   return { valid: issues.length === 0, issues };
 }
 
+/** 校验输入；不通过时抛出包含所有失败项的异常。 */
 export function assertJsonSchema(schema: JsonSchema, value: unknown): void {
   const result = validateJsonSchema(schema, value);
   if (!result.valid) throw new SchemaValidationError(result.issues);
 }
 
+/** 按值的运行时类型递归应用当前 Schema 支持的约束。 */
 function validate(schema: JsonSchema, value: unknown, path: string, issues: SchemaIssue[]): void {
   if (Array.isArray(schema.enum) && !schema.enum.some((candidate) => Object.is(candidate, value))) {
     issues.push({ path, message: "must equal one of the allowed values" });
@@ -72,6 +74,7 @@ function validate(schema: JsonSchema, value: unknown, path: string, issues: Sche
   if (isRecord(value)) validateObject(schema, value, path, issues);
 }
 
+/** 校验对象的必填字段、已声明属性及额外属性限制。 */
 function validateObject(schema: JsonSchema, value: Record<string, unknown>, path: string, issues: SchemaIssue[]): void {
   const required = Array.isArray(schema.required)
     ? schema.required.filter((key): key is string => typeof key === "string")
@@ -87,6 +90,7 @@ function validateObject(schema: JsonSchema, value: Record<string, unknown>, path
   }
 }
 
+/** 判断值是否符合 Schema 声明的基础类型；未知类型不在此处拒绝。 */
 function matchesType(type: string, value: unknown): boolean {
   switch (type) {
     case "object":
@@ -108,9 +112,12 @@ function matchesType(type: string, value: unknown): boolean {
   }
 }
 
+/** 判断值是否为可作为 JSON 对象处理的普通记录。 */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
+
+/** 判断值是否可递归用作子 Schema。 */
 function isSchema(value: unknown): value is JsonSchema {
   return isRecord(value);
 }
