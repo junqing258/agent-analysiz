@@ -12,7 +12,12 @@ export class LocalArtifactStore implements ArtifactStore {
     const id = `sha256-${sha256}`;
     await mkdir(this.root, { recursive: true });
     const location = join(this.root, sha256);
-    try { await readFile(location); } catch (error) { if (isMissing(error)) await writeFile(location, bytes); else throw error; }
+    try {
+      await readFile(location);
+    } catch (error) {
+      if (isMissing(error)) await writeFile(location, bytes);
+      else throw error;
+    }
     return { id, sha256, mediaType: options.mediaType, byteLength: bytes.byteLength };
   }
   async get(ref: ArtifactRef): Promise<Uint8Array> {
@@ -23,4 +28,8 @@ export class LocalArtifactStore implements ArtifactStore {
   }
 }
 export const localArtifactStore = (root: string): LocalArtifactStore => new LocalArtifactStore(root);
-function isMissing(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT"; }
+function isMissing(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT"
+  );
+}

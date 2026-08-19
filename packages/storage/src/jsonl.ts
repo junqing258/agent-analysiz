@@ -21,7 +21,9 @@ export class JsonlEventStore implements EventStore {
 
   async *readAfter(sequence: number): AsyncIterable<StoredEvent> {
     let text: string;
-    try { text = new TextDecoder().decode(await readFile(this.filePath)); } catch (error) {
+    try {
+      text = new TextDecoder().decode(await readFile(this.filePath));
+    } catch (error) {
       if (isMissing(error)) return;
       throw error;
     }
@@ -44,12 +46,25 @@ export class JsonlEventStore implements EventStore {
   private async enqueue<T>(operation: () => Promise<T>): Promise<T> {
     let resolveResult!: (value: T) => void;
     let rejectResult!: (reason: unknown) => void;
-    const result = new Promise<T>((resolve, reject) => { resolveResult = resolve; rejectResult = reject; });
-    this.writes = this.writes.then(async () => { try { resolveResult(await operation()); } catch (error) { rejectResult(error); } });
+    const result = new Promise<T>((resolve, reject) => {
+      resolveResult = resolve;
+      rejectResult = reject;
+    });
+    this.writes = this.writes.then(async () => {
+      try {
+        resolveResult(await operation());
+      } catch (error) {
+        rejectResult(error);
+      }
+    });
     await this.writes;
     return result;
   }
 }
 
 export const jsonlEventStore = (filePath: string): JsonlEventStore => new JsonlEventStore(filePath);
-function isMissing(error: unknown): boolean { return typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT"; }
+function isMissing(error: unknown): boolean {
+  return (
+    typeof error === "object" && error !== null && "code" in error && (error as { code?: string }).code === "ENOENT"
+  );
+}

@@ -1,6 +1,7 @@
 {
   "name": "@agent-sdk/storage",
   "version": "0.1.0",
+  "description": "Agent SDK 的持久化存储层，提供事件日志、恢复与工件存储能力。",
   "type": "module",
   "dependencies": { "@agent-sdk/core": "workspace:*" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/cjs/index.js" } },

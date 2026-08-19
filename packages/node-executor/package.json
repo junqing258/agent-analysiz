@@ -1,6 +1,7 @@
 {
   "name": "@agent-sdk/node-executor",
   "version": "0.1.0",
+  "description": "面向 Node.js 的 Agent 工具执行器，提供文件系统与命令执行能力。",
   "type": "module",
   "dependencies": { "@agent-sdk/core": "workspace:*" },
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/cjs/index.js" } },
