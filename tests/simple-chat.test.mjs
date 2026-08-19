@@ -31,6 +31,7 @@ test("OpenAI Responses gateway converts SSE text and usage to SDK deltas", async
 
 test("Anthropic Messages gateway uses the configured base URL and normalizes streaming events", async () => {
   let request;
+  const diagnostics = [];
   const sse = [
     'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":8}}}',
     '',
@@ -38,13 +39,15 @@ test("Anthropic Messages gateway uses the configured base URL and normalizes str
     '',
     'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":2}}'
   ].join("\n");
-  const gateway = new AnthropicMessagesGateway({ baseUrl: "https://gateway.test/v1", authToken: "token", model: "claude-test", fetch: async (url, init) => { request = { url, init }; return new Response(sse, { status: 200 }); } });
+  const gateway = new AnthropicMessagesGateway({ baseUrl: "https://gateway.test/v1", authToken: "token", model: "claude-test", diagnosticLogger: (stage, details) => diagnostics.push({ stage, details }), fetch: async (url, init) => { request = { url, init }; return new Response(sse, { status: 200 }); } });
   const deltas = [];
   for await (const delta of gateway.stream({ messages: [{ id: "system", role: "system", createdAt: "now", content: [{ type: "text", text: "Be helpful" }] }, { id: "user", role: "user", createdAt: "now", content: [{ type: "text", text: "Hi" }] }], tools: [], maxOutputTokens: 99 }, { signal: new AbortController().signal })) deltas.push(delta);
   assert.deepEqual(deltas, [{ type: "text-delta", text: "Hello" }, { type: "usage", inputTokens: 8, outputTokens: 2 }, { type: "finish", reason: "length" }]);
   assert.equal(request.url, "https://gateway.test/v1/messages");
   assert.equal(request.init.headers["x-api-key"], "token");
   assert.deepEqual(JSON.parse(request.init.body), { model: "claude-test", max_tokens: 99, stream: true, system: "Be helpful", messages: [{ role: "user", content: "Hi" }] });
+  assert.deepEqual(diagnostics.map(({ stage }) => stage), ["anthropic.request.started", "anthropic.response.received", "anthropic.stream.event", "anthropic.stream.event", "anthropic.stream.event", "anthropic.stream.finished"]);
+  assert(!JSON.stringify(diagnostics).includes("token"));
   const provider = createModelProvider({ environment: { ANTHROPIC_BASE_URL: "https://gateway.test", ANTHROPIC_AUTH_TOKEN: "token", ANTHROPIC_MODEL: "claude-test" } });
   assert.equal(provider.provider, "anthropic");
 });

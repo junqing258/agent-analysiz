@@ -1,9 +1,7 @@
-import { createInterface } from "node:readline/promises";
-import { argv, cwd, env, stdin, stdout } from "node:process";
+import { argv, cwd, env } from "node:process";
 import {
   AgentSession,
   type ModelGateway,
-  type TransportEvent,
 } from "@agent-sdk/core";
 import {
   jsonlEventStore,
@@ -12,10 +10,13 @@ import {
   recoverSession,
 } from "@agent-sdk/storage";
 import { loadEnv } from "./env.js";
+import { createDiagnosticLogger, isDebugEnabled } from "./debug.js";
 import { createModelProvider } from "./providers.js";
+import { TerminalChat } from "./tui.js";
 
 interface CliOptions {
   demo: boolean;
+  debug: boolean;
   model?: string;
   provider?: string;
   envFile?: string;
@@ -29,17 +30,24 @@ async function main(): Promise<void> {
     file: options.envFile,
     startDirectory: env.INIT_CWD ?? cwd(),
   });
+  const diagnosticLogger = createDiagnosticLogger(
+    options.debug || isDebugEnabled(env.SIMPLE_CHAT_DEBUG),
+  );
   const modelProvider = createModelProvider({
     provider: options.provider,
     model: options.model,
     forceDemo: options.demo,
     environment: env,
+    diagnosticLogger,
   });
   const gateway: ModelGateway = modelProvider.gateway;
-  console.log(
-    `Provider: ${modelProvider.provider}${modelProvider.model ? ` (${modelProvider.model})` : ""}${loadedEnv ? ` · loaded ${loadedEnv}` : ""}\n`,
-  );
-
+  diagnosticLogger?.("cli.configuration", {
+    provider: modelProvider.provider,
+    model: modelProvider.model,
+    loadedEnv,
+    sessionFile: options.sessionFile,
+    authConfigured: Boolean(env.ANTHROPIC_AUTH_TOKEN),
+  });
   const eventStore = jsonlEventStore(options.sessionFile);
   const recovered = await recoverSession(eventStore);
   await markInterruptedTools(eventStore, recovered);
@@ -54,62 +62,13 @@ async function main(): Promise<void> {
     artifactStore: localArtifactStore(".agent/artifacts"),
     initialMessages: recovered.messages,
   });
-  const readline = createInterface({
-    input: stdin,
-    output: stdout,
-    terminal: true,
-  });
-  console.log(
-    `Simple Chat — /help for commands, /exit to leave.${recovered.messages.length ? ` Resumed ${recovered.messages.length} message(s).` : ""}\n`,
-  );
-  try {
-    while (true) {
-      let answer: string;
-      try {
-        answer = await readline.question("you> ");
-      } catch (error) {
-        if (error instanceof Error && error.message === "readline was closed")
-          break;
-        throw error;
-      }
-      const input = answer.trim();
-      if (!input) continue;
-      if (input === "/exit" || input === "/quit") break;
-      if (input === "/help") {
-        printHelp();
-        continue;
-      }
-      await printTurn(session, input);
-    }
-  } finally {
-    readline.close();
-  }
-}
-
-async function printTurn(session: AgentSession, input: string): Promise<void> {
-  let wroteText = false;
-  try {
-    for await (const event of session.run(input)) {
-      if (event.type === "model.text.delta") {
-        if (!wroteText) process.stdout.write("assistant> ");
-        process.stdout.write(event.text);
-        wroteText = true;
-      } else printNonTextEvent(event);
-    }
-  } catch (error) {
-    console.error(
-      `\nerror: ${error instanceof Error ? error.message : "unknown failure"}`,
-    );
-  }
-  if (wroteText) process.stdout.write("\n\n");
-}
-function printNonTextEvent(
-  event: Exclude<TransportEvent, { type: "model.text.delta" }>,
-): void {
-  if (event.type === "turn.failed")
-    console.error(`\nerror: ${event.error.message}`);
-  if (event.type === "turn.interrupted")
-    console.error(`\ninterrupted: ${event.reason}`);
+  const providerLabel = `${modelProvider.provider}${modelProvider.model ? ` · ${modelProvider.model}` : ""}${loadedEnv ? " · .env loaded" : ""}`;
+  await new TerminalChat({
+    session,
+    providerLabel,
+    resumedMessages: recovered.messages.length,
+    diagnosticLogger,
+  }).start();
 }
 function parseArgs(args: string[]): CliOptions {
   let model: string | undefined;
@@ -117,8 +76,10 @@ function parseArgs(args: string[]): CliOptions {
   let envFile: string | undefined;
   let sessionFile = ".agent/sessions/simple-chat.jsonl";
   let demo = false;
+  let debug = false;
   for (let index = 0; index < args.length; index += 1) {
     if (args[index] === "--demo") demo = true;
+    else if (args[index] === "--debug") debug = true;
     else if (args[index] === "--model")
       model = requireValue(args[++index], "--model");
     else if (args[index] === "--provider")
@@ -130,19 +91,20 @@ function parseArgs(args: string[]): CliOptions {
     else if (args[index] !== "--help" && args[index] !== "-h")
       throw new Error(`Unknown option: ${args[index]}`);
   }
-  return { demo, model, provider: optionsProvider, envFile, sessionFile };
+  return { demo, debug, model, provider: optionsProvider, envFile, sessionFile };
 }
 function requireValue(value: string | undefined, option: string): string {
   if (!value) throw new Error(`${option} requires a value`);
   return value;
 }
 function printHelp(): void {
-  console.log(`Usage: pnpm simple-chat [--demo] [--provider PROVIDER] [--model MODEL] [--env FILE] [--session FILE]
+  console.log(`Usage: pnpm simple-chat [--demo] [--debug] [--provider PROVIDER] [--model MODEL] [--env FILE] [--session FILE]
 
 Configuration is loaded from the nearest .env without overwriting shell variables.
 Supported providers: anthropic, openai, demo. Use --demo to force offline mode.
+Use --debug or SIMPLE_CHAT_DEBUG=1 to print secret-safe diagnostics.
 
-Chat commands: /help, /exit`);
+The TUI requires an interactive terminal. Chat commands: /help, /clear, /exit.`);
 }
 
 void main().catch((error) => {

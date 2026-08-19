@@ -1,5 +1,6 @@
 import type { ModelGateway } from "@agent-sdk/core";
 import { AnthropicMessagesGateway } from "./anthropic-messages-gateway.js";
+import type { DiagnosticLogger } from "./debug.js";
 import { DemoGateway } from "./demo-gateway.js";
 import { OpenAIResponsesGateway } from "./openai-responses-gateway.js";
 
@@ -9,6 +10,7 @@ export interface ModelProviderOptions {
   model?: string;
   forceDemo?: boolean;
   environment: Record<string, string | undefined>;
+  diagnosticLogger?: DiagnosticLogger;
 }
 export interface ResolvedModelProvider {
   provider: SupportedModelProvider;
@@ -33,7 +35,16 @@ export function createModelProvider(
     const model = options.model ?? options.environment.ANTHROPIC_MODEL;
     if (!baseUrl || !authToken || !model)
       throw new Error("MODEL_PROVIDER=anthropic requires ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN, and ANTHROPIC_MODEL.");
-    return { provider: "anthropic", model, gateway: new AnthropicMessagesGateway({ baseUrl, authToken, model }) };
+    return {
+      provider: "anthropic",
+      model,
+      gateway: new AnthropicMessagesGateway({
+        baseUrl,
+        authToken,
+        model,
+        diagnosticLogger: options.diagnosticLogger,
+      }),
+    };
   }
   if (requested === "openai") {
     const apiKey = options.environment.OPENAI_API_KEY;

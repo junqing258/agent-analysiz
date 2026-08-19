@@ -5,3 +5,45 @@
 {"sequence":5,"event":{"type":"message.appended","message":{"id":"message_mszoqlib_bxlhhah1","role":"assistant","content":[{"type":"text","text":"Demo mode received: hi"}],"createdAt":"2026-08-19T06:03:03.395Z"}}}
 {"sequence":6,"event":{"type":"session.state.changed","state":"completed"}}
 {"sequence":7,"event":{"type":"turn.completed","messageId":"message_mszoqlib_bxlhhah1"}}
+{"sequence":8,"event":{"type":"turn.started","turnId":"turn_mszpn9rd_r06w17p0","at":"2026-08-19T06:28:27.817Z"}}
+{"sequence":9,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":10,"event":{"type":"message.appended","message":{"id":"message_mszpn9rg_q0rx9yjr","role":"user","content":[{"type":"text","text":"hi"}],"createdAt":"2026-08-19T06:28:27.820Z"}}}
+{"sequence":11,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":12,"event":{"type":"message.appended","message":{"id":"message_mszpnbda_ofn1repf","role":"assistant","content":[{"type":"text","text":"Hello again! How can I help you today?"}],"createdAt":"2026-08-19T06:28:29.902Z"}}}
+{"sequence":13,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":14,"event":{"type":"turn.completed","messageId":"message_mszpnbda_ofn1repf"}}
+{"sequence":15,"event":{"type":"turn.started","turnId":"turn_mszru71s_lceudgwm","at":"2026-08-19T07:29:50.128Z"}}
+{"sequence":16,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":17,"event":{"type":"message.appended","message":{"id":"message_mszru71x_kcvkqxxt","role":"user","content":[{"type":"text","text":"hi"}],"createdAt":"2026-08-19T07:29:50.133Z"}}}
+{"sequence":18,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":19,"event":{"type":"message.appended","message":{"id":"message_mszru9vn_orfhkl7e","role":"assistant","content":[{"type":"text","text":"Hi! Looks like we're in a loop. I'm here whenever you're ready to ask something specific."}],"createdAt":"2026-08-19T07:29:53.795Z"}}}
+{"sequence":20,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":21,"event":{"type":"turn.completed","messageId":"message_mszru9vn_orfhkl7e"}}
+{"sequence":22,"event":{"type":"turn.started","turnId":"turn_mszrujx5_o26rmuki","at":"2026-08-19T07:30:06.809Z"}}
+{"sequence":23,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":24,"event":{"type":"message.appended","message":{"id":"message_mszrujx8_i8jhzuuq","role":"user","content":[{"type":"text","text":"hi"}],"createdAt":"2026-08-19T07:30:06.812Z"}}}
+{"sequence":25,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":26,"event":{"type":"message.appended","message":{"id":"message_mszrulda_2ypkmq56","role":"assistant","content":[{"type":"text","text":"Hi again! It seems you're enjoying the greetings. What would you like to talk about? I'm ready for any question or topic you have in mind!"}],"createdAt":"2026-08-19T07:30:08.686Z"}}}
+{"sequence":27,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":28,"event":{"type":"turn.completed","messageId":"message_mszrulda_2ypkmq56"}}
+{"sequence":29,"event":{"type":"turn.started","turnId":"turn_mszruotf_ee2nh0q1","at":"2026-08-19T07:30:13.155Z"}}
+{"sequence":30,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":31,"event":{"type":"message.appended","message":{"id":"message_mszruoti_mq6kbpc6","role":"user","content":[{"type":"text","text":"你是谁"}],"createdAt":"2026-08-19T07:30:13.158Z"}}}
+{"sequence":32,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":33,"event":{"type":"message.appended","message":{"id":"message_mszrurs9_2d6r37iy","role":"assistant","content":[{"type":"text","text":"我是AI助手，可以回答问题、提供信息、协助完成任务，或者陪你聊天。刚才我们确实一直打招呼来着——现在有什么具体想聊的吗？"}],"createdAt":"2026-08-19T07:30:17.001Z"}}}
+{"sequence":34,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":35,"event":{"type":"turn.completed","messageId":"message_mszrurs9_2d6r37iy"}}
+{"sequence":36,"event":{"type":"turn.started","turnId":"turn_mszsfrda_ipld3m5v","at":"2026-08-19T07:46:36.238Z"}}
+{"sequence":37,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":38,"event":{"type":"message.appended","message":{"id":"message_mszsfrdp_jp67bcxk","role":"user","content":[{"type":"text","text":"hi"}],"createdAt":"2026-08-19T07:46:36.253Z"}}}
+{"sequence":39,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":40,"event":{"type":"message.appended","message":{"id":"message_mszsfuuc_0zic46ds","role":"assistant","content":[{"type":"text","text":"Hello again! You're really keeping me on my toes with all these greetings. I'm still here and ready to help—just let me know what you'd like to talk about or ask."}],"createdAt":"2026-08-19T07:46:40.740Z"}}}
+{"sequence":41,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":42,"event":{"type":"turn.completed","messageId":"message_mszsfuuc_0zic46ds"}}
+{"sequence":43,"event":{"type":"turn.started","turnId":"turn_mszskxrs_xwhzsrsg","at":"2026-08-19T07:50:37.816Z"}}
+{"sequence":44,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":45,"event":{"type":"message.appended","message":{"id":"message_mszskxs3_nzxr4w23","role":"user","content":[{"type":"text","text":"m"}],"createdAt":"2026-08-19T07:50:37.827Z"}}}
+{"sequence":46,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":47,"event":{"type":"message.appended","message":{"id":"message_mszskzyn_prukuk9n","role":"assistant","content":[{"type":"text","text":"Just \"m\"? Did something get cut off? I'm here if you meant to type more—or we can keep it playful. What's on your mind?"}],"createdAt":"2026-08-19T07:50:40.655Z"}}}
+{"sequence":48,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":49,"event":{"type":"turn.completed","messageId":"message_mszskzyn_prukuk9n"}}

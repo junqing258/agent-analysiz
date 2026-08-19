@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "rootDir": "./src", "outDir": "./dist", "tsBuildInfoFile": "./dist/.tsbuildinfo" },
+  "compilerOptions": { "rootDir": "./src", "outDir": "./dist", "tsBuildInfoFile": "./dist/.tsbuildinfo", "jsx": "react-jsx" },
   "references": [{ "path": "../../packages/core" }, { "path": "../../packages/storage" }],
-  "include": ["src/**/*.ts", "../../packages/node-shims.d.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "../../packages/node-shims.d.ts"]
 }

@@ -10,6 +10,11 @@
   },
   "dependencies": {
     "@agent-sdk/core": "workspace:*",
-    "@agent-sdk/storage": "workspace:*"
+    "@agent-sdk/storage": "workspace:*",
+    "ink": "^6.8.0",
+    "react": "^19.2.8"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.18"
   }
 }
