@@ -48,17 +48,24 @@ function validate(schema: JsonSchema, value: unknown, path: string, issues: Sche
     return;
   }
   if (typeof value === "string") {
-    if (typeof schema.minLength === "number" && value.length < schema.minLength) issues.push({ path, message: `must have at least ${schema.minLength} characters` });
-    if (typeof schema.maxLength === "number" && value.length > schema.maxLength) issues.push({ path, message: `must have at most ${schema.maxLength} characters` });
-    if (typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value)) issues.push({ path, message: "must match required pattern" });
+    if (typeof schema.minLength === "number" && value.length < schema.minLength)
+      issues.push({ path, message: `must have at least ${schema.minLength} characters` });
+    if (typeof schema.maxLength === "number" && value.length > schema.maxLength)
+      issues.push({ path, message: `must have at most ${schema.maxLength} characters` });
+    if (typeof schema.pattern === "string" && !new RegExp(schema.pattern).test(value))
+      issues.push({ path, message: "must match required pattern" });
   }
   if (typeof value === "number") {
-    if (typeof schema.minimum === "number" && value < schema.minimum) issues.push({ path, message: `must be >= ${schema.minimum}` });
-    if (typeof schema.maximum === "number" && value > schema.maximum) issues.push({ path, message: `must be <= ${schema.maximum}` });
+    if (typeof schema.minimum === "number" && value < schema.minimum)
+      issues.push({ path, message: `must be >= ${schema.minimum}` });
+    if (typeof schema.maximum === "number" && value > schema.maximum)
+      issues.push({ path, message: `must be <= ${schema.maximum}` });
   }
   if (Array.isArray(value)) {
-    if (typeof schema.minItems === "number" && value.length < schema.minItems) issues.push({ path, message: `must contain at least ${schema.minItems} items` });
-    if (typeof schema.maxItems === "number" && value.length > schema.maxItems) issues.push({ path, message: `must contain at most ${schema.maxItems} items` });
+    if (typeof schema.minItems === "number" && value.length < schema.minItems)
+      issues.push({ path, message: `must contain at least ${schema.minItems} items` });
+    if (typeof schema.maxItems === "number" && value.length > schema.maxItems)
+      issues.push({ path, message: `must contain at most ${schema.maxItems} items` });
     const itemSchema = schema.items;
     if (isSchema(itemSchema)) value.forEach((item, index) => validate(itemSchema, item, `${path}[${index}]`, issues));
   }
@@ -66,31 +73,44 @@ function validate(schema: JsonSchema, value: unknown, path: string, issues: Sche
 }
 
 function validateObject(schema: JsonSchema, value: Record<string, unknown>, path: string, issues: SchemaIssue[]): void {
-  const required = Array.isArray(schema.required) ? schema.required.filter((key): key is string => typeof key === "string") : [];
+  const required = Array.isArray(schema.required)
+    ? schema.required.filter((key): key is string => typeof key === "string")
+    : [];
   for (const key of required) if (!(key in value)) issues.push({ path: `${path}.${key}`, message: "is required" });
   const properties = isRecord(schema.properties) ? schema.properties : {};
   for (const [key, childSchema] of Object.entries(properties)) {
     if (key in value && isSchema(childSchema)) validate(childSchema, value[key], `${path}.${key}`, issues);
   }
   if (schema.additionalProperties === false) {
-    for (const key of Object.keys(value)) if (!(key in properties)) issues.push({ path: `${path}.${key}`, message: "is not allowed" });
+    for (const key of Object.keys(value))
+      if (!(key in properties)) issues.push({ path: `${path}.${key}`, message: "is not allowed" });
   }
 }
 
 function matchesType(type: string, value: unknown): boolean {
   switch (type) {
-    case "object": return isRecord(value);
-    case "array": return Array.isArray(value);
-    case "string": return typeof value === "string";
-    case "number": return typeof value === "number" && Number.isFinite(value);
-    case "integer": return typeof value === "number" && Number.isInteger(value);
-    case "boolean": return typeof value === "boolean";
-    case "null": return value === null;
-    default: return true;
+    case "object":
+      return isRecord(value);
+    case "array":
+      return Array.isArray(value);
+    case "string":
+      return typeof value === "string";
+    case "number":
+      return typeof value === "number" && Number.isFinite(value);
+    case "integer":
+      return typeof value === "number" && Number.isInteger(value);
+    case "boolean":
+      return typeof value === "boolean";
+    case "null":
+      return value === null;
+    default:
+      return true;
   }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-function isSchema(value: unknown): value is JsonSchema { return isRecord(value); }
+function isSchema(value: unknown): value is JsonSchema {
+  return isRecord(value);
+}
