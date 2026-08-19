@@ -12,6 +12,7 @@
     "@agent-sdk/core": "workspace:*",
     "@agent-sdk/storage": "workspace:*",
     "ink": "^6.8.0",
+    "ink-scroll-view": "0.3.7",
     "react": "^19.2.8"
   },
   "devDependencies": {
