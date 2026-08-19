@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { loadEnv, parseDotEnv } from "../apps/simple-chat/dist/env.js";
+import { AnthropicMessagesGateway } from "../apps/simple-chat/dist/anthropic-messages-gateway.js";
 import { OpenAIResponsesGateway } from "../apps/simple-chat/dist/openai-responses-gateway.js";
 import { createModelProvider } from "../apps/simple-chat/dist/providers.js";
 
@@ -26,6 +27,26 @@ test("OpenAI Responses gateway converts SSE text and usage to SDK deltas", async
   assert.equal(request.url, "https://example.test/responses");
   assert.equal(request.init.headers.Authorization, "Bearer test-key");
   assert.deepEqual(JSON.parse(request.init.body), { model: "test-model", input: [{ role: "system", content: "Be helpful" }, { role: "user", content: "Hi" }], stream: true, store: false, max_output_tokens: 99 });
+});
+
+test("Anthropic Messages gateway uses the configured base URL and normalizes streaming events", async () => {
+  let request;
+  const sse = [
+    'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":8}}}',
+    '',
+    'event: content_block_delta\ndata: {"type":"content_block_delta","delta":{"type":"text_delta","text":"Hello"}}',
+    '',
+    'event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"max_tokens"},"usage":{"output_tokens":2}}'
+  ].join("\n");
+  const gateway = new AnthropicMessagesGateway({ baseUrl: "https://gateway.test/v1", authToken: "token", model: "claude-test", fetch: async (url, init) => { request = { url, init }; return new Response(sse, { status: 200 }); } });
+  const deltas = [];
+  for await (const delta of gateway.stream({ messages: [{ id: "system", role: "system", createdAt: "now", content: [{ type: "text", text: "Be helpful" }] }, { id: "user", role: "user", createdAt: "now", content: [{ type: "text", text: "Hi" }] }], tools: [], maxOutputTokens: 99 }, { signal: new AbortController().signal })) deltas.push(delta);
+  assert.deepEqual(deltas, [{ type: "text-delta", text: "Hello" }, { type: "usage", inputTokens: 8, outputTokens: 2 }, { type: "finish", reason: "length" }]);
+  assert.equal(request.url, "https://gateway.test/v1/messages");
+  assert.equal(request.init.headers["x-api-key"], "token");
+  assert.deepEqual(JSON.parse(request.init.body), { model: "claude-test", max_tokens: 99, stream: true, system: "Be helpful", messages: [{ role: "user", content: "Hi" }] });
+  const provider = createModelProvider({ environment: { ANTHROPIC_BASE_URL: "https://gateway.test", ANTHROPIC_AUTH_TOKEN: "token", ANTHROPIC_MODEL: "claude-test" } });
+  assert.equal(provider.provider, "anthropic");
 });
 
 test(".env loader searches upward, parses values, and preserves shell configuration", async () => {
