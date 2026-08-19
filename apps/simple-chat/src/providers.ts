@@ -1,7 +1,9 @@
 import type { ModelGateway } from "@agent-sdk/core";
-import { AnthropicMessagesGateway } from "./anthropic-messages-gateway.js";
+import {
+  AnthropicMessagesGateway,
+  OpenAIResponsesGateway,
+} from "@agent-sdk/model-gateway";
 import type { DiagnosticLogger } from "./debug.js";
-import { OpenAIResponsesGateway } from "./openai-responses-gateway.js";
 
 export type SupportedModelProvider = "anthropic" | "openai";
 export interface ModelProviderOptions {

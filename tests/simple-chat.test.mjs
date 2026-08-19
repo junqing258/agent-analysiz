@@ -4,8 +4,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { loadEnv, parseDotEnv } from "../apps/simple-chat/dist/env.js";
-import { AnthropicMessagesGateway } from "../apps/simple-chat/dist/anthropic-messages-gateway.js";
-import { OpenAIResponsesGateway } from "../apps/simple-chat/dist/openai-responses-gateway.js";
+import { AnthropicMessagesGateway, OpenAIResponsesGateway } from "../packages/model-gateway/dist/index.js";
 import { createModelProvider } from "../apps/simple-chat/dist/providers.js";
 
 test("OpenAI Responses gateway converts SSE text and usage to SDK deltas", async () => {

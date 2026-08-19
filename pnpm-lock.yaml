@@ -32,6 +32,9 @@ importers:
       '@agent-sdk/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agent-sdk/model-gateway':
+        specifier: workspace:*
+        version: link:../../packages/model-gateway
       '@agent-sdk/node-executor':
         specifier: workspace:*
         version: link:../../packages/node-executor
@@ -57,6 +60,12 @@ importers:
       '@agent-sdk/schema':
         specifier: workspace:*
         version: link:../schema
+
+  packages/model-gateway:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/node-executor:
     dependencies:

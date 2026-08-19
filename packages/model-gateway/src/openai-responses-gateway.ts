@@ -15,7 +15,7 @@ export interface OpenAIResponsesGatewayOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-/** Responses API adapter which normalizes text and function calls for AgentSession. */
+/** Responses API adapter that normalizes text and function calls for AgentSession. */
 export class OpenAIResponsesGateway implements ModelGateway {
   private readonly model: string;
   private readonly endpoint: string;
@@ -26,10 +26,7 @@ export class OpenAIResponsesGateway implements ModelGateway {
     this.fetcher = options.fetch ?? globalThis.fetch;
   }
 
-  async *stream(
-    request: ModelRequest,
-    options: { signal: AbortSignal },
-  ): AsyncIterable<ModelDelta> {
+  async *stream(request: ModelRequest, options: { signal: AbortSignal }): AsyncIterable<ModelDelta> {
     const response = await this.fetcher(this.endpoint, {
       method: "POST",
       signal: options.signal,
@@ -43,24 +40,15 @@ export class OpenAIResponsesGateway implements ModelGateway {
         ...(request.tools.length ? { tools: toOpenAITools(request.tools) } : {}),
         stream: true,
         store: false,
-        ...(request.maxOutputTokens
-          ? { max_output_tokens: request.maxOutputTokens }
-          : {}),
+        ...(request.maxOutputTokens ? { max_output_tokens: request.maxOutputTokens } : {}),
       }),
     });
-    if (!response.ok)
-      throw new Error(
-        `OpenAI Responses API ${response.status}: ${await response.text()}`,
-      );
-    if (!response.body)
-      throw new Error("OpenAI Responses API returned no streaming body");
+    if (!response.ok) throw new Error(`OpenAI Responses API ${response.status}: ${await response.text()}`);
+    if (!response.body) throw new Error("OpenAI Responses API returned no streaming body");
     const callsByOutputIndex = new Map<number, OpenAIFunctionCall>();
     const emittedCallIds = new Set<string>();
     for await (const event of parseSse(response.body, options.signal)) {
-      if (
-        event.type === "response.output_text.delta" &&
-        typeof event.delta === "string"
-      )
+      if (event.type === "response.output_text.delta" && typeof event.delta === "string")
         yield { type: "text-delta", text: event.delta };
       else if (event.type === "response.output_item.added") {
         const item = asRecord(event.item);
@@ -68,10 +56,7 @@ export class OpenAIResponsesGateway implements ModelGateway {
           const call = readFunctionCall(item);
           if (call) callsByOutputIndex.set(readOutputIndex(event), call);
         }
-      } else if (
-        event.type === "response.function_call_arguments.delta" &&
-        typeof event.delta === "string"
-      ) {
+      } else if (event.type === "response.function_call_arguments.delta" && typeof event.delta === "string") {
         const call = callsByOutputIndex.get(readOutputIndex(event));
         if (call) {
           call.arguments += event.delta;
@@ -95,11 +80,7 @@ export class OpenAIResponsesGateway implements ModelGateway {
         }
       } else if (event.type === "response.completed") {
         const usage = asRecord(event.response).usage;
-        if (
-          isRecord(usage) &&
-          typeof usage.input_tokens === "number" &&
-          typeof usage.output_tokens === "number"
-        )
+        if (isRecord(usage) && typeof usage.input_tokens === "number" && typeof usage.output_tokens === "number")
           yield {
             type: "usage",
             inputTokens: usage.input_tokens,
@@ -109,8 +90,7 @@ export class OpenAIResponsesGateway implements ModelGateway {
           type: "finish",
           reason: emittedCallIds.size > 0 ? "tool-use" : "stop",
         };
-      } else if (event.type === "response.incomplete")
-        yield { type: "finish", reason: "length" };
+      } else if (event.type === "response.incomplete") yield { type: "finish", reason: "length" };
       else if (event.type === "error") throw new Error(readError(event));
     }
   }
@@ -139,28 +119,31 @@ function toOpenAIInput(messages: AgentMessage[]): OpenAIInputItem[] {
     if (message.role === "tool") {
       return message.content.flatMap((content) =>
         content.type === "tool-result"
-          ? [{
-              type: "function_call_output" as const,
-              call_id: content.callId,
-              output: toolResultText(content.result),
-            }]
+          ? [
+              {
+                type: "function_call_output" as const,
+                call_id: content.callId,
+                output: toolResultText(content.result),
+              },
+            ]
           : [],
       );
     }
     const text = textContent(message);
     const calls = message.content.flatMap((content) =>
       content.type === "tool-call"
-        ? [{
-            type: "function_call" as const,
-            call_id: content.call.id,
-            name: content.call.name,
-            arguments: JSON.stringify(content.call.input),
-          }]
+        ? [
+            {
+              type: "function_call" as const,
+              call_id: content.call.id,
+              name: content.call.name,
+              arguments: JSON.stringify(content.call.input),
+            },
+          ]
         : [],
     );
     const items: OpenAIInputItem[] = [];
-    if (text || calls.length === 0)
-      items.push({ role: message.role, content: text });
+    if (text || calls.length === 0) items.push({ role: message.role, content: text });
     items.push(...calls);
     return items;
   });
@@ -177,20 +160,14 @@ function toOpenAITools(tools: ModelToolDefinition[]) {
 
 function textContent(message: AgentMessage): string {
   return message.content
-    .filter(
-      (content): content is Extract<typeof content, { type: "text" }> =>
-        content.type === "text",
-    )
+    .filter((content): content is Extract<typeof content, { type: "text" }> => content.type === "text")
     .map((content) => content.text)
     .join("\n");
 }
 
 function toolResultText(result: Extract<AgentMessage["content"][number], { type: "tool-result" }>["result"]): string {
   const text = result.content
-    .reduce<string[]>(
-      (texts, content) => content.type === "text" ? [...texts, content.text] : texts,
-      [],
-    )
+    .reduce<string[]>((texts, content) => (content.type === "text" ? [...texts, content.text] : texts), [])
     .join("\n");
   return text || JSON.stringify(result);
 }
@@ -210,10 +187,7 @@ function readFunctionCall(item: Record<string, unknown>): OpenAIFunctionCall | u
   };
 }
 
-function* emitFunctionCall(
-  call: OpenAIFunctionCall,
-  emittedCallIds: Set<string>,
-): Generator<ModelDelta> {
+function* emitFunctionCall(call: OpenAIFunctionCall, emittedCallIds: Set<string>): Generator<ModelDelta> {
   if (emittedCallIds.has(call.id)) return;
   emittedCallIds.add(call.id);
   yield {
@@ -274,7 +248,5 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 function readError(event: Record<string, unknown>): string {
   const error = asRecord(event.error);
-  return typeof error.message === "string"
-    ? error.message
-    : "OpenAI Responses API stream error";
+  return typeof error.message === "string" ? error.message : "OpenAI Responses API stream error";
 }

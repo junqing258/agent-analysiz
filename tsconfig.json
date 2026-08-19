@@ -3,6 +3,7 @@
   "references": [
     { "path": "./packages/schema" },
     { "path": "./packages/core" },
+    { "path": "./packages/model-gateway" },
     { "path": "./packages/storage" },
     { "path": "./packages/node-executor" },
     { "path": "./apps/simple-chat" }

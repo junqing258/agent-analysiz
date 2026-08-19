@@ -7,7 +7,7 @@ import type {
   TokenEstimate,
   TokenEstimateInput,
 } from "@agent-sdk/core";
-import type { DiagnosticLogger } from "./debug.js";
+export type DiagnosticLogger = (stage: string, details?: Record<string, unknown>) => void;
 
 export interface AnthropicMessagesGatewayOptions {
   baseUrl: string;
@@ -25,10 +25,7 @@ export class AnthropicMessagesGateway implements ModelGateway {
     this.endpoint = messagesEndpoint(options.baseUrl);
     this.fetcher = options.fetch ?? globalThis.fetch;
   }
-  async *stream(
-    request: ModelRequest,
-    options: { signal: AbortSignal },
-  ): AsyncIterable<ModelDelta> {
+  async *stream(request: ModelRequest, options: { signal: AbortSignal }): AsyncIterable<ModelDelta> {
     const { system, messages } = toAnthropicInput(request.messages);
     const body = {
       model: this.options.model,
@@ -66,10 +63,7 @@ export class AnthropicMessagesGateway implements ModelGateway {
     this.log("anthropic.response.received", {
       status: response.status,
       ok: response.ok,
-      requestId:
-        response.headers.get("request-id") ??
-        response.headers.get("x-request-id") ??
-        undefined,
+      requestId: response.headers.get("request-id") ?? response.headers.get("x-request-id") ?? undefined,
       contentType: response.headers.get("content-type") ?? undefined,
     });
     if (!response.ok) {
@@ -80,8 +74,7 @@ export class AnthropicMessagesGateway implements ModelGateway {
       });
       throw new Error(`Anthropic Messages API ${response.status}: ${errorBody}`);
     }
-    if (!response.body)
-      throw new Error("Anthropic Messages API returned no streaming body");
+    if (!response.body) throw new Error("Anthropic Messages API returned no streaming body");
     let inputTokens: number | undefined;
     let outputTokens: number | undefined;
     let finish: "stop" | "tool-use" | "length" = "stop";
@@ -101,10 +94,7 @@ export class AnthropicMessagesGateway implements ModelGateway {
         const delta = asRecord(event.delta);
         if (delta.type === "text_delta" && typeof delta.text === "string")
           yield { type: "text-delta", text: delta.text };
-        else if (
-          delta.type === "input_json_delta" &&
-          typeof delta.partial_json === "string"
-        ) {
+        else if (delta.type === "input_json_delta" && typeof delta.partial_json === "string") {
           const call = callsByContentIndex.get(readContentIndex(event));
           if (call) {
             call.inputText += delta.partial_json;
@@ -120,23 +110,17 @@ export class AnthropicMessagesGateway implements ModelGateway {
         if (call) yield* emitFunctionCall(call, emittedCallIds);
       } else if (event.type === "message_start") {
         const usage = asRecord(asRecord(event.message).usage);
-        if (typeof usage.input_tokens === "number")
-          inputTokens = usage.input_tokens;
+        if (typeof usage.input_tokens === "number") inputTokens = usage.input_tokens;
       } else if (event.type === "message_delta") {
         const delta = asRecord(event.delta);
         const usage = asRecord(event.usage);
-        if (typeof usage.output_tokens === "number")
-          outputTokens = usage.output_tokens;
+        if (typeof usage.output_tokens === "number") outputTokens = usage.output_tokens;
         if (delta.stop_reason === "tool_use") finish = "tool-use";
-        else if (
-          delta.stop_reason === "max_tokens" ||
-          delta.stop_reason === "model_context_window_exceeded"
-        )
+        else if (delta.stop_reason === "max_tokens" || delta.stop_reason === "model_context_window_exceeded")
           finish = "length";
       } else if (event.type === "error") throw new Error(readError(event));
     }
-    if (inputTokens !== undefined && outputTokens !== undefined)
-      yield { type: "usage", inputTokens, outputTokens };
+    if (inputTokens !== undefined && outputTokens !== undefined) yield { type: "usage", inputTokens, outputTokens };
     this.log("anthropic.stream.finished", {
       finish,
       inputTokens,
@@ -212,12 +196,14 @@ function toAnthropicInput(messages: AgentMessage[]): {
     const text = textContent(message);
     const calls = message.content.flatMap((content) =>
       content.type === "tool-call"
-        ? [{
-            type: "tool_use" as const,
-            id: content.call.id,
-            name: content.call.name,
-            input: content.call.input,
-          }]
+        ? [
+            {
+              type: "tool_use" as const,
+              id: content.call.id,
+              name: content.call.name,
+              input: content.call.input,
+            },
+          ]
         : [],
     );
     output.push({
@@ -229,19 +215,13 @@ function toAnthropicInput(messages: AgentMessage[]): {
 }
 function textContent(message: AgentMessage): string {
   return message.content
-    .filter(
-      (content): content is Extract<typeof content, { type: "text" }> =>
-        content.type === "text",
-    )
+    .filter((content): content is Extract<typeof content, { type: "text" }> => content.type === "text")
     .map((content) => content.text)
     .join("\n");
 }
 function toolResultText(result: Extract<AgentMessage["content"][number], { type: "tool-result" }>["result"]): string {
   const text = result.content
-    .reduce<string[]>(
-      (texts, content) => content.type === "text" ? [...texts, content.text] : texts,
-      [],
-    )
+    .reduce<string[]>((texts, content) => (content.type === "text" ? [...texts, content.text] : texts), [])
     .join("\n");
   return text || JSON.stringify(result);
 }
@@ -259,19 +239,14 @@ function readFunctionCall(block: Record<string, unknown>): AnthropicFunctionCall
   const id = typeof block.id === "string" ? block.id : undefined;
   const name = typeof block.name === "string" ? block.name : undefined;
   if (!id || !name) return undefined;
-  const initialInput = isRecord(block.input) && Object.keys(block.input).length
-    ? JSON.stringify(block.input)
-    : "";
+  const initialInput = isRecord(block.input) && Object.keys(block.input).length ? JSON.stringify(block.input) : "";
   return {
     id,
     name,
     inputText: initialInput,
   };
 }
-function* emitFunctionCall(
-  call: AnthropicFunctionCall,
-  emittedCallIds: Set<string>,
-): Generator<ModelDelta> {
+function* emitFunctionCall(call: AnthropicFunctionCall, emittedCallIds: Set<string>): Generator<ModelDelta> {
   if (emittedCallIds.has(call.id)) return;
   emittedCallIds.add(call.id);
   yield {
@@ -336,7 +311,5 @@ function asRecord(value: unknown): Record<string, unknown> {
 }
 function readError(event: Record<string, unknown>): string {
   const error = asRecord(event.error);
-  return typeof error.message === "string"
-    ? error.message
-    : "Anthropic Messages API stream error";
+  return typeof error.message === "string" ? error.message : "Anthropic Messages API stream error";
 }

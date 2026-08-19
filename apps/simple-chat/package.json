@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@agent-sdk/core": "workspace:*",
+    "@agent-sdk/model-gateway": "workspace:*",
     "@agent-sdk/node-executor": "workspace:*",
     "@agent-sdk/storage": "workspace:*",
     "ink": "^6.8.0",
