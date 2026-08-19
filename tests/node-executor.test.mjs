@@ -19,4 +19,7 @@ test("file tools require a same-session read before exact edit", async () => {
   assert.equal(await readFile(join(root, "note.txt"), "utf8"), "after");
   const outside = await write.execute({ path: "../outside", content: "x" }, ctx);
   assert.equal(outside.ok, false); assert.equal(outside.error.code, "PATH_OUTSIDE_WORKSPACE");
+  const created = await write.execute({ path: "new-file.txt", content: "created" }, ctx);
+  assert.equal(created.ok, true);
+  assert.equal(await readFile(join(root, "new-file.txt"), "utf8"), "created");
 });

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Box, render, Text, useApp, useCursor, useInput, useStdin, type DOMElement } from "ink";
 import { ScrollView, type ScrollViewRef } from "ink-scroll-view";
 import { stdin, stdout } from "node:process";
-import type { AgentMessage, AgentSession, TransportEvent } from "@agent-sdk/core";
+import type { AgentMessage, AgentSession, PermissionDecision, PermissionRequest, TransportEvent } from "@agent-sdk/core";
 import type { DiagnosticLogger } from "./debug.js";
 
 interface ChatMessage {
@@ -51,7 +51,9 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
       : "Ready",
   );
   const [busy, setBusy] = useState(false);
+  const [pendingPermission, setPendingPermission] = useState<PermissionRequest | undefined>(undefined);
   const activeTurn = useRef<AbortController | undefined>(undefined);
+  const pendingPermissionRef = useRef<PermissionRequest | undefined>(undefined);
   const historyRef = useRef<ScrollViewRef>(null);
   const composerRef = useRef<DOMElement>(null);
   const [composerPosition, setComposerPosition] = useState({ left: 0, top: 0 });
@@ -74,12 +76,12 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
         ? current
         : { left: layout.left, top: layout.top },
     );
-  }, [busy, input, messages, terminalHeight]);
+  }, [busy, input, messages, pendingPermission, terminalHeight]);
 
   // Position the physical cursor relative to the composer's calculated Yoga
   // layout, rather than assuming the message list has a fixed height.
   setCursorPosition(
-    busy
+    busy || pendingPermission
       ? undefined
       : {
           x: composerPosition.left + 2 + displayWidth(input.slice(0, cursor)),
@@ -96,6 +98,23 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
   const eraseForward = useCallback(() => {
     setInput((current) => current.slice(0, cursor) + current.slice(cursor + 1));
   }, [cursor]);
+
+  const showPermissionRequest = useCallback((request: PermissionRequest) => {
+    pendingPermissionRef.current = request;
+    setPendingPermission(request);
+  }, []);
+
+  const resolvePermission = useCallback((decision: PermissionDecision) => {
+    const request = pendingPermissionRef.current;
+    if (!request) return;
+    pendingPermissionRef.current = undefined;
+    setPendingPermission(undefined);
+    void options.session.resolvePermission(request.id, decision).catch((error) => {
+      setStatus(
+        `Permission resolution failed: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+    });
+  }, [options.session]);
 
   const close = useCallback(() => {
     activeTurn.current?.abort(new Error("Chat closed"));
@@ -154,6 +173,9 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
                 : message,
             ),
           );
+        } else if (event.type === "permission.requested") {
+          showPermissionRequest(event.request);
+          setStatus(`Approval required: ${event.request.tool}`);
         } else if (event.type === "session.state.changed") {
           setStatus(statusForState(event.state));
           options.diagnosticLogger?.("agent.event", {
@@ -184,9 +206,11 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
       }
     } finally {
       if (activeTurn.current === controller) activeTurn.current = undefined;
+      pendingPermissionRef.current = undefined;
+      setPendingPermission(undefined);
       setBusy(false);
     }
-  }, [appendSystemMessage, busy, close, input, options]);
+  }, [appendSystemMessage, busy, close, input, options, showPermissionRequest]);
 
   useEffect(() => {
     const handleRawInput = (data: { toString(encoding?: string): string }) => {
@@ -202,6 +226,13 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
   useInput((keyInput, key) => {
     if ((key.ctrl && keyInput === "c") || (key.ctrl && keyInput === "d")) {
       close();
+      return;
+    }
+    if (pendingPermission) {
+      if (keyInput.toLowerCase() === "y")
+        resolvePermission({ type: "allow-once" });
+      else if (keyInput.toLowerCase() === "n" || key.escape)
+        resolvePermission({ type: "deny", reason: "Denied in terminal" });
       return;
     }
     if (key.return) {
@@ -276,24 +307,27 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
           <MessageView key={message.id} message={message} />
         ))}
       </ScrollView>
+      {pendingPermission ? <PermissionPrompt request={pendingPermission} /> : null}
       <Box
         ref={composerRef}
         borderStyle="round"
-        borderColor={busy ? "yellow" : "green"}
+        borderColor={busy || pendingPermission ? "yellow" : "green"}
         height={3}
         minHeight={3}
         flexShrink={0}
         paddingX={1}
       >
         <Box flexGrow={1} flexDirection="column" justifyContent="center" alignItems="flex-start">
-          <Composer value={input} cursor={cursor} busy={busy} />
+          <Composer value={input} cursor={cursor} busy={busy} permissionPending={Boolean(pendingPermission)} />
         </Box>
       </Box>
       <Box paddingX={1} backgroundColor="blue">
         <Text color="white" dimColor wrap="truncate-end">
-          {busy
-            ? "Generating… ↑/↓ scroll · Ctrl-C exits"
-            : "Enter send · ↑/↓ scroll · PgUp/PgDn page · Home/End ends · Ctrl-C exit"}
+          {pendingPermission
+            ? "Approval pending · y allow once · n deny · Ctrl-C exit"
+            : busy
+              ? "Generating… ↑/↓ scroll · Ctrl-C exits"
+              : "Enter send · ↑/↓ scroll · PgUp/PgDn page · Home/End ends · Ctrl-C exit"}
         </Text>
       </Box>
     </Box>
@@ -311,12 +345,22 @@ function MessageView({ message }: { message: ChatMessage }): React.JSX.Element {
   );
 }
 
-function Composer({ value, cursor, busy }: { value: string; cursor: number; busy: boolean }): React.JSX.Element {
+function PermissionPrompt({ request }: { request: PermissionRequest }): React.JSX.Element {
+  return (
+    <Box borderStyle="round" borderColor="yellow" paddingX={1} flexShrink={0}>
+      <Text color="yellow" wrap="truncate-end">
+        Allow {request.risk} tool “{request.tool}” in this workspace? [y] allow once  [n] deny
+      </Text>
+    </Box>
+  );
+}
+
+function Composer({ value, cursor, busy, permissionPending }: { value: string; cursor: number; busy: boolean; permissionPending: boolean }): React.JSX.Element {
   const before = value.slice(0, cursor);
   const after = value.slice(cursor);
   return (
     <Text color={busy ? "gray" : "white"} wrap="truncate-end">
-      {busy ? "Assistant is responding…" : <>{before}<Text color="green">▏</Text>{after}</>}
+      {permissionPending ? "Waiting for your approval…" : busy ? "Assistant is responding…" : <>{before}<Text color="green">▏</Text>{after}</>}
     </Text>
   );
 }
@@ -349,6 +393,8 @@ function statusForState(state: string): string {
     ? "Assistant is responding…"
     : state === "building-context"
       ? "Preparing context…"
+      : state === "awaiting-permission"
+        ? "Approval required"
       : state === "completed"
         ? "Ready"
         : state.replace(/-/g, " ");

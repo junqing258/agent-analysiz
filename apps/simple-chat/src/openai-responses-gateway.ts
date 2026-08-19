@@ -3,6 +3,7 @@ import type {
   ModelDelta,
   ModelGateway,
   ModelRequest,
+  ModelToolDefinition,
   TokenEstimate,
   TokenEstimateInput,
 } from "@agent-sdk/core";
@@ -14,7 +15,7 @@ export interface OpenAIResponsesGatewayOptions {
   fetch?: typeof globalThis.fetch;
 }
 
-/** Minimal Responses API adapter for text-only chat. Tool mapping belongs in a provider package. */
+/** Responses API adapter which normalizes text and function calls for AgentSession. */
 export class OpenAIResponsesGateway implements ModelGateway {
   private readonly model: string;
   private readonly endpoint: string;
@@ -29,10 +30,6 @@ export class OpenAIResponsesGateway implements ModelGateway {
     request: ModelRequest,
     options: { signal: AbortSignal },
   ): AsyncIterable<ModelDelta> {
-    if (request.tools.length > 0)
-      throw new Error(
-        "OpenAIResponsesGateway in simple-chat supports text-only sessions; configure no tools.",
-      );
     const response = await this.fetcher(this.endpoint, {
       method: "POST",
       signal: options.signal,
@@ -43,6 +40,7 @@ export class OpenAIResponsesGateway implements ModelGateway {
       body: JSON.stringify({
         model: this.model,
         input: toOpenAIInput(request.messages),
+        ...(request.tools.length ? { tools: toOpenAITools(request.tools) } : {}),
         stream: true,
         store: false,
         ...(request.maxOutputTokens
@@ -56,13 +54,46 @@ export class OpenAIResponsesGateway implements ModelGateway {
       );
     if (!response.body)
       throw new Error("OpenAI Responses API returned no streaming body");
+    const callsByOutputIndex = new Map<number, OpenAIFunctionCall>();
+    const emittedCallIds = new Set<string>();
     for await (const event of parseSse(response.body, options.signal)) {
       if (
         event.type === "response.output_text.delta" &&
         typeof event.delta === "string"
       )
         yield { type: "text-delta", text: event.delta };
-      else if (event.type === "response.completed") {
+      else if (event.type === "response.output_item.added") {
+        const item = asRecord(event.item);
+        if (item.type === "function_call") {
+          const call = readFunctionCall(item);
+          if (call) callsByOutputIndex.set(readOutputIndex(event), call);
+        }
+      } else if (
+        event.type === "response.function_call_arguments.delta" &&
+        typeof event.delta === "string"
+      ) {
+        const call = callsByOutputIndex.get(readOutputIndex(event));
+        if (call) {
+          call.arguments += event.delta;
+          yield {
+            type: "tool-call-delta",
+            id: call.id,
+            inputTextDelta: event.delta,
+          };
+        }
+      } else if (event.type === "response.function_call_arguments.done") {
+        const call = callsByOutputIndex.get(readOutputIndex(event));
+        if (call && typeof event.arguments === "string") {
+          call.arguments = event.arguments;
+          yield* emitFunctionCall(call, emittedCallIds);
+        }
+      } else if (event.type === "response.output_item.done") {
+        const item = asRecord(event.item);
+        if (item.type === "function_call") {
+          const call = readFunctionCall(item);
+          if (call) yield* emitFunctionCall(call, emittedCallIds);
+        }
+      } else if (event.type === "response.completed") {
         const usage = asRecord(event.response).usage;
         if (
           isRecord(usage) &&
@@ -74,7 +105,10 @@ export class OpenAIResponsesGateway implements ModelGateway {
             inputTokens: usage.input_tokens,
             outputTokens: usage.output_tokens,
           };
-        yield { type: "finish", reason: "stop" };
+        yield {
+          type: "finish",
+          reason: emittedCallIds.size > 0 ? "tool-use" : "stop",
+        };
       } else if (event.type === "response.incomplete")
         yield { type: "finish", reason: "length" };
       else if (event.type === "error") throw new Error(readError(event));
@@ -89,19 +123,113 @@ export class OpenAIResponsesGateway implements ModelGateway {
   }
 }
 
-function toOpenAIInput(
-  messages: AgentMessage[],
-): Array<{ role: "system" | "user" | "assistant"; content: string }> {
-  return messages.filter(isSupportedMessage).map((message) => ({
-    role: message.role,
-    content: message.content
-      .filter(
-        (content): content is Extract<typeof content, { type: "text" }> =>
-          content.type === "text",
-      )
-      .map((content) => content.text)
-      .join("\n"),
+type OpenAIInputItem =
+  | { role: "system" | "user" | "assistant"; content: string }
+  | { type: "function_call"; call_id: string; name: string; arguments: string }
+  | { type: "function_call_output"; call_id: string; output: string };
+
+interface OpenAIFunctionCall {
+  id: string;
+  name: string;
+  arguments: string;
+}
+
+function toOpenAIInput(messages: AgentMessage[]): OpenAIInputItem[] {
+  return messages.flatMap((message) => {
+    if (message.role === "tool") {
+      return message.content.flatMap((content) =>
+        content.type === "tool-result"
+          ? [{
+              type: "function_call_output" as const,
+              call_id: content.callId,
+              output: toolResultText(content.result),
+            }]
+          : [],
+      );
+    }
+    const text = textContent(message);
+    const calls = message.content.flatMap((content) =>
+      content.type === "tool-call"
+        ? [{
+            type: "function_call" as const,
+            call_id: content.call.id,
+            name: content.call.name,
+            arguments: JSON.stringify(content.call.input),
+          }]
+        : [],
+    );
+    const items: OpenAIInputItem[] = [];
+    if (text || calls.length === 0)
+      items.push({ role: message.role, content: text });
+    items.push(...calls);
+    return items;
+  });
+}
+
+function toOpenAITools(tools: ModelToolDefinition[]) {
+  return tools.map((tool) => ({
+    type: "function" as const,
+    name: tool.name,
+    description: tool.description,
+    parameters: tool.inputSchema,
   }));
+}
+
+function textContent(message: AgentMessage): string {
+  return message.content
+    .filter(
+      (content): content is Extract<typeof content, { type: "text" }> =>
+        content.type === "text",
+    )
+    .map((content) => content.text)
+    .join("\n");
+}
+
+function toolResultText(result: Extract<AgentMessage["content"][number], { type: "tool-result" }>["result"]): string {
+  const text = result.content
+    .reduce<string[]>(
+      (texts, content) => content.type === "text" ? [...texts, content.text] : texts,
+      [],
+    )
+    .join("\n");
+  return text || JSON.stringify(result);
+}
+
+function readOutputIndex(event: Record<string, unknown>): number {
+  return typeof event.output_index === "number" ? event.output_index : -1;
+}
+
+function readFunctionCall(item: Record<string, unknown>): OpenAIFunctionCall | undefined {
+  const id = typeof item.call_id === "string" ? item.call_id : undefined;
+  const name = typeof item.name === "string" ? item.name : undefined;
+  if (!id || !name) return undefined;
+  return {
+    id,
+    name,
+    arguments: typeof item.arguments === "string" ? item.arguments : "",
+  };
+}
+
+function* emitFunctionCall(
+  call: OpenAIFunctionCall,
+  emittedCallIds: Set<string>,
+): Generator<ModelDelta> {
+  if (emittedCallIds.has(call.id)) return;
+  emittedCallIds.add(call.id);
+  yield {
+    type: "tool-call",
+    id: call.id,
+    name: call.name,
+    input: parseFunctionArguments(call.arguments),
+  };
+}
+
+function parseFunctionArguments(argumentsText: string): unknown {
+  try {
+    return JSON.parse(argumentsText);
+  } catch {
+    return {};
+  }
 }
 
 async function* parseSse(
@@ -140,11 +268,6 @@ async function* parseSse(
 }
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-function isSupportedMessage(
-  message: AgentMessage,
-): message is AgentMessage & { role: "system" | "user" | "assistant" } {
-  return message.role !== "tool";
 }
 function asRecord(value: unknown): Record<string, unknown> {
   return isRecord(value) ? value : {};

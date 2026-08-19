@@ -3,6 +3,7 @@ import {
   AgentSession,
   type ModelGateway,
 } from "@agent-sdk/core";
+import { createNodeTools } from "@agent-sdk/node-executor";
 import {
   jsonlEventStore,
   localArtifactStore,
@@ -26,9 +27,12 @@ interface CliOptions {
 async function main(): Promise<void> {
   const options = parseArgs(argv.slice(2));
   if (argv.includes("--help") || argv.includes("-h")) return printHelp();
+  // pnpm runs package scripts from the package directory. INIT_CWD preserves
+  // the directory the user started from, which is the intended file-tool root.
+  const workspace = env.INIT_CWD ?? cwd();
   const loadedEnv = await loadEnv({
     file: options.envFile,
-    startDirectory: env.INIT_CWD ?? cwd(),
+    startDirectory: workspace,
   });
   const diagnosticLogger = createDiagnosticLogger(
     options.debug || isDebugEnabled(env.SIMPLE_CHAT_DEBUG),
@@ -46,6 +50,7 @@ async function main(): Promise<void> {
     model: modelProvider.model,
     loadedEnv,
     sessionFile: options.sessionFile,
+    workspace,
     authConfigured: Boolean(env.ANTHROPIC_AUTH_TOKEN),
   });
   const eventStore = jsonlEventStore(options.sessionFile);
@@ -53,14 +58,16 @@ async function main(): Promise<void> {
   await markInterruptedTools(eventStore, recovered);
   const session = new AgentSession({
     model: gateway,
+    tools: createNodeTools(workspace),
     context: {
-      system: "You are a concise, helpful assistant.",
+      system: "You are a concise, helpful workspace assistant. Use the available file tools when the user asks about local files. Only modify files when the user has requested a change; read an existing target before changing it and explain the result.",
       contextWindowTokens: 100_000,
       maxOutputTokens: 2_000,
     },
     eventStore,
     artifactStore: localArtifactStore(".agent/artifacts"),
     initialMessages: recovered.messages,
+    workspace,
   });
   const providerLabel = `${modelProvider.provider}${modelProvider.model ? ` · ${modelProvider.model}` : ""}${loadedEnv ? " · .env loaded" : ""}`;
   await new TerminalChat({
