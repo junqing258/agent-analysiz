@@ -1,0 +1,44 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  apps/simple-chat:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../../packages/core
+      '@agent-sdk/storage':
+        specifier: workspace:*
+        version: link:../../packages/storage
+
+  packages/core:
+    dependencies:
+      '@agent-sdk/schema':
+        specifier: workspace:*
+        version: link:../schema
+
+  packages/mock-gateway:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/node-executor:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../core
+
+  packages/schema: {}
+
+  packages/storage:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../core

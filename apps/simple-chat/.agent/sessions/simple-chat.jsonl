@@ -1,0 +1,7 @@
+{"sequence":1,"event":{"type":"turn.started","turnId":"turn_mszoqli5_05hzwjuq","at":"2026-08-19T06:03:03.389Z"}}
+{"sequence":2,"event":{"type":"session.state.changed","state":"building-context"}}
+{"sequence":3,"event":{"type":"message.appended","message":{"id":"message_mszoqli9_ybqjwf3u","role":"user","content":[{"type":"text","text":"hi"}],"createdAt":"2026-08-19T06:03:03.393Z"}}}
+{"sequence":4,"event":{"type":"session.state.changed","state":"streaming"}}
+{"sequence":5,"event":{"type":"message.appended","message":{"id":"message_mszoqlib_bxlhhah1","role":"assistant","content":[{"type":"text","text":"Demo mode received: hi"}],"createdAt":"2026-08-19T06:03:03.395Z"}}}
+{"sequence":6,"event":{"type":"session.state.changed","state":"completed"}}
+{"sequence":7,"event":{"type":"turn.completed","messageId":"message_mszoqlib_bxlhhah1"}}

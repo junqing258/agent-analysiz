@@ -1,0 +1,17 @@
+{
+  "name": "agent-sdk-js",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "scripts": {
+    "build": "tsc -b && tsc -p packages/schema/tsconfig.cjs.json && tsc -p packages/core/tsconfig.cjs.json && tsc -p packages/storage/tsconfig.cjs.json && tsc -p packages/node-executor/tsconfig.cjs.json && tsc -p packages/mock-gateway/tsconfig.cjs.json && for pkg in schema core storage node-executor mock-gateway; do mkdir -p packages/$pkg/dist/cjs; cp packages/cjs-package.json packages/$pkg/dist/cjs/package.json; done",
+    "clean": "tsc -b --clean",
+    "test": "pnpm build && node --test tests/**/*.test.mjs",
+    "typecheck": "tsc -b --pretty false",
+    "simple-chat": "pnpm --filter @agent-sdk/simple-chat start",
+    "simple-chat:demo": "pnpm --filter @agent-sdk/simple-chat demo",
+    "simple-chat:dev": "pnpm --filter @agent-sdk/simple-chat dev"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

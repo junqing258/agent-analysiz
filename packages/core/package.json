@@ -1,0 +1,8 @@
+{
+  "name": "@agent-sdk/core",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": { "@agent-sdk/schema": "workspace:*" },
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/cjs/index.js" } },
+  "files": ["dist"]
+}

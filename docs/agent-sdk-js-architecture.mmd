@@ -8,7 +8,8 @@ flowchart LR
   Policy --> Executor["ToolExecutor / Sandbox"]
   Executor --> Registry
   Agent --> Store["EventStore: JSONL / DB"]
-  Agent --> Events["AsyncIterable AgentEvent"]
+  Store --> Artifacts["ArtifactStore"]
+  Agent --> Events["AsyncIterable TransportEvent"]
   Registry -. "扩展" .-> MCP["MCP Adapter"]
   Context -. "扩展" .-> Skills["Skills / Memory"]
   Registry -. "扩展" .-> Hooks["Hooks"]

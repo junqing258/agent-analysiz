@@ -1,0 +1,4 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "module": "CommonJS", "moduleResolution": "Node", "ignoreDeprecations": "6.0", "baseUrl": "./", "paths": { "@agent-sdk/core": ["../core/dist/index.d.ts"] }, "composite": false, "verbatimModuleSyntax": false, "declaration": false, "declarationMap": false, "outDir": "./dist/cjs", "tsBuildInfoFile": "./dist/cjs/.tsbuildinfo" }
+}

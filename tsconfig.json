@@ -1,0 +1,11 @@
+{
+  "files": [],
+  "references": [
+    { "path": "./packages/schema" },
+    { "path": "./packages/core" },
+    { "path": "./packages/storage" },
+    { "path": "./packages/node-executor" },
+    { "path": "./packages/mock-gateway" },
+    { "path": "./apps/simple-chat" }
+  ]
+}

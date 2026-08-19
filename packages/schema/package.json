@@ -1,0 +1,7 @@
+{
+  "name": "@agent-sdk/schema",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js", "require": "./dist/cjs/index.js" } },
+  "files": ["dist"]
+}
