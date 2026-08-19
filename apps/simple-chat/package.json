@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "start": "node dist/index.js",
-    "demo": "node dist/index.js --demo",
     "dev": "node scripts/dev.mjs"
   },
   "dependencies": {

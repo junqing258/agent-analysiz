@@ -58,12 +58,6 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
-  packages/mock-gateway:
-    dependencies:
-      '@agent-sdk/core':
-        specifier: workspace:*
-        version: link:../core
-
   packages/node-executor:
     dependencies:
       '@agent-sdk/core':

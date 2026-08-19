@@ -4,4 +4,4 @@
 
 The core only persists a `tool.requested` event after it receives a complete tool call. Text deltas and tool-call deltas are transport-only and must never be appended to `EventStore`.
 
-For deterministic testing, use `@agent-sdk/mock-gateway` with a sequence of `ModelDelta[]` responses. Production adapters should propagate the supplied `AbortSignal`, normalize retries/rate limits, and implement `estimateTokens()` when their provider supports it.
+For deterministic testing, use the `MockGateway` fixture in `tests/mock-gateway.mjs` with a sequence of `ModelDelta[]` responses. Production adapters should propagate the supplied `AbortSignal`, normalize retries/rate limits, and implement `estimateTokens()` when their provider supports it.

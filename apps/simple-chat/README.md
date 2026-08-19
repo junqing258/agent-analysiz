@@ -4,12 +4,6 @@
 
 ```bash
 pnpm install
-pnpm simple-chat:demo
-
-# 开发模式：增量编译 TypeScript，并在代码变更后重启 Node 进程
-pnpm simple-chat:dev -- --demo
-
-# 真实模型模式
 cp .env.example .env
 # 在 .env 中设置 ANTHROPIC_AUTH_TOKEN 与 ANTHROPIC_MODEL 后执行：
 pnpm simple-chat
@@ -23,8 +17,6 @@ Agent 可以读取启动命令所在工作区内的文件，并可使用 `read`�
 
 真实模型模式通过服务端 `fetch` 调用 Anthropic Messages API 或 OpenAI Responses API，并流式输出文本与工具调用增量。`ANTHROPIC_AUTH_TOKEN` 和 `OPENAI_API_KEY` 只能保存在服务端；Anthropic 适配器会发送 `x-api-key` 与 `anthropic-version` 请求头，并把 `max_tokens` 停止原因映射为 SDK 的长度结束事件。参考 Anthropic 的 [停止原因与流式响应说明](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons)。
 
-`--demo` 不访问网络，也不需要凭据。它使用确定性的本地网关，适合对应用和事件存储进行冒烟测试。
-
 ## 模型供应商与 `.env`
 
 启动器会从当前目录向上查找 `.env`；Shell 环境变量始终优先于 `.env`。复制 `.env.example` 为 `.env` 后，配置一个模型供应商：
@@ -36,11 +28,11 @@ ANTHROPIC_AUTH_TOKEN=your_server_side_token
 ANTHROPIC_MODEL=your-model-id
 ```
 
-设置 `MODEL_PROVIDER=demo` 可使用离线网关。CLI 还支持 `--provider anthropic`、`--model …` 与 `--env path/to/.env`，这些命令行选项优先于 `.env` 中的值。相对 `--env` 路径以执行 `pnpm` 时所在目录为基准解析。
+支持 Anthropic 与 OpenAI。CLI 还支持 `--provider anthropic`、`--model …` 与 `--env path/to/.env`，这些命令行选项优先于 `.env` 中的值。相对 `--env` 路径以执行 `pnpm` 时所在目录为基准解析。
 
 ## 开发模式
 
-`pnpm simple-chat:dev -- --demo` 会先启动 TypeScript 编译监听器，首次构建成功后启动 CLI。之后每次增量编译成功，CLI 都会自动重启。修改 `apps/simple-chat/src/` 下的文件（或 SDK 源码依赖）后，应用会重新编译并加载。可在 `--` 后传入常规 CLI 参数，例如：`pnpm simple-chat:dev -- --model your-model-id --session .agent/dev.jsonl`。
+`pnpm simple-chat:dev` 会先启动 TypeScript 编译监听器，首次构建成功后启动 CLI。之后每次增量编译成功，CLI 都会自动重启。修改 `apps/simple-chat/src/` 下的文件（或 SDK 源码依赖）后，应用会重新编译并加载。可在 `--` 后传入常规 CLI 参数，例如：`pnpm simple-chat:dev -- --model your-model-id --session .agent/dev.jsonl`。
 
 ## 诊断日志
 
