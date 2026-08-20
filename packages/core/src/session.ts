@@ -193,7 +193,7 @@ export class AgentSession {
     const timeout = this.options.turnTimeoutMs
       ? setTimeout(() => controller.abort(new Error("turn timeout")), this.options.turnTimeoutMs)
       : undefined;
-    let turnId = `turn_${randomId()}`;
+    const turnId = `turn_${randomId()}`;
     try {
       await this.persist({ type: "turn.started", turnId, at: now() }, queue);
       await this.setState("building-context", queue);

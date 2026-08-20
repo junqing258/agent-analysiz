@@ -13,7 +13,28 @@ pnpm simple-chat
 
 启动后会进入基于 Ink + React 的全屏 TUI：消息区会持续显示历史消息，状态栏显示当前流式生成状态，底部输入框持续接收新消息。按 Enter 发送；可使用左右方向键、Backspace 编辑，`Ctrl-U` 清空输入；输入 `/help` 查看命令，`/clear` 仅清空屏幕显示，`/exit`（或 `Ctrl-C` / `Ctrl-D`）退出。退出后再次以同一 `--session` 启动，仍会续接同一段对话。TUI 需要在交互式终端中运行。
 
-Agent 可以读取启动命令所在工作区内的文件，并可使用 `read`、`glob`、`grep`、`write` 与 `edit` 工具。路径不能越过该工作区；创建新文件可直接使用 `write`，覆盖已有文件或 `edit` 则必须在本会话中先读取目标文件。读取自动许可，`write` 和 `edit` 会在 TUI 中显示确认提示，按 `y` 仅允许本次操作，按 `n` 拒绝。
+Agent 可以读取启动命令所在工作区内的文件，并可使用 `read`、`glob`、`grep`、`write`、`edit` 与 `bash` 工具。路径不能越过该工作区；创建新文件可直接使用 `write`，覆盖已有文件或 `edit` 则必须在本会话中先读取目标文件。`bash` 可运行 Node.js 脚本，例如 `node --version` 或 `node scripts/check.mjs`；它只接收结构化的可执行文件与参数，不支持 shell 字符串。读取自动许可，`write`、`edit` 和 `bash` 会在 TUI 中显示确认提示，按 `y` 仅允许本次操作，按 `n` 拒绝。
+
+## Skills
+
+启动时会从工作区的 `.agent/skills/*/SKILL.md` 发现技能；目录不存在时会继续正常启动。每轮会向模型提供技能目录，输入 `/技能名` 可显式加载技能，也可由 `triggers` 中配置的触发词自动加载。使用 `--skills path/to/skills` 可指定其他技能根目录。
+
+```text
+.agent/skills/release/SKILL.md
+```
+
+```markdown
+---
+name: release
+description: Prepare a release checklist.
+triggers: [release, publish]
+allowedTools: [read, glob, grep]
+---
+
+Inspect the workspace and prepare a concise release checklist.
+```
+
+`allowedTools` 为可选字段；设置后，本轮活跃技能只能使用所列工具。技能正文会作为非可信上下文发送，不能提高文件工具的权限。
 
 真实模型模式通过服务端 `fetch` 调用 Anthropic Messages API 或 OpenAI Responses API，并流式输出文本与工具调用增量。`ANTHROPIC_AUTH_TOKEN` 和 `OPENAI_API_KEY` 只能保存在服务端；Anthropic 适配器会发送 `x-api-key` 与 `anthropic-version` 请求头，并把 `max_tokens` 停止原因映射为 SDK 的长度结束事件。参考 Anthropic 的 [停止原因与流式响应说明](https://platform.claude.com/docs/en/build-with-claude/handling-stop-reasons)。
 

@@ -1,0 +1,89 @@
+{
+  "name": "default",
+  "weights": {
+    "trend": 30,
+    "bias": 20,
+    "volume": 15,
+    "macd": 15,
+    "rsi": 10,
+    "support": 10
+  },
+  "trend_scores": {
+    "strong_bullish": 30,
+    "bullish": 26,
+    "weak_bullish": 18,
+    "consolidation": 12,
+    "weak_bearish": 8,
+    "bearish": 4,
+    "strong_bearish": 0,
+    "insufficient_data": 12
+  },
+  "trend_default": 12,
+  "bias_null_score": 10,
+  "bias_default_score": 10,
+  "bias_bands": [
+    { "min": -3, "max": 0, "score": 20 },
+    { "min": 0, "max": 2, "score": 18 },
+    { "min": 2, "max": 5, "score": 14 },
+    { "min": 5, "max": null, "score": 4 },
+    { "min": -5, "max": -3, "score": 14 },
+    { "min": null, "max": -5, "score": 6 }
+  ],
+  "volume_scores": {
+    "shrink_pullback": 15,
+    "heavy_volume_up": 12,
+    "normal": 10,
+    "shrink_up": 6,
+    "heavy_volume_down": 0,
+    "insufficient_data": 8,
+    "unknown": 8
+  },
+  "volume_default": 8,
+  "macd_scores": {
+    "golden_cross_above_zero": 15,
+    "crossing_above_zero": 13,
+    "golden_cross": 12,
+    "bullish": 10,
+    "neutral": 7,
+    "bearish": 3,
+    "death_cross": 0,
+    "crossing_below_zero": 1,
+    "insufficient_data": 7
+  },
+  "macd_default": 7,
+  "rsi_scores": {
+    "oversold": 10,
+    "strong": 8,
+    "neutral": 5,
+    "weak": 3,
+    "overbought": 0,
+    "unknown": 5
+  },
+  "rsi_default": 5,
+  "support_ma5_points": 5,
+  "support_ma10_points": 5,
+  "signal_rules": [
+    { "signal": "strong_buy", "min_score": 75, "require_alignment": ["bullish", "strong_bullish"] },
+    { "signal": "buy", "min_score": 60, "require_alignment": ["bullish", "strong_bullish", "weak_bullish"] },
+    { "signal": "hold", "min_score": 45 },
+    { "signal": "wait", "min_score": 30 },
+    { "signal": "strong_sell", "require_alignment": ["bearish", "strong_bearish"] },
+    { "signal": "sell" }
+  ],
+  "signal_cn": {
+    "strong_buy": "强烈买入",
+    "buy": "买入",
+    "hold": "持有",
+    "wait": "观望",
+    "sell": "卖出",
+    "strong_sell": "强烈卖出"
+  },
+  "hard_rules": {
+    "applies_to_signals": ["strong_buy", "buy"],
+    "downgrade_to": "hold",
+    "rules": [
+      { "id": "rsi_overbought", "type": "rsi_zone_equals", "value": "overbought", "message": "RSI > 80 (overbought)" },
+      { "id": "bias_overextended", "type": "bias_ma5_above", "threshold": 5, "message_template": "MA5 乖离 {value:+.2f}% > 5% (overextended)" }
+    ]
+  }
+}

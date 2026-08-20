@@ -38,6 +38,9 @@ importers:
       '@agent-sdk/node-executor':
         specifier: workspace:*
         version: link:../../packages/node-executor
+      '@agent-sdk/skills':
+        specifier: workspace:*
+        version: link:../../packages/skills
       '@agent-sdk/storage':
         specifier: workspace:*
         version: link:../../packages/storage
@@ -61,6 +64,12 @@ importers:
         specifier: workspace:*
         version: link:../schema
 
+  packages/memory:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../core
+
   packages/model-gateway:
     dependencies:
       '@agent-sdk/core':
@@ -74,6 +83,12 @@ importers:
         version: link:../core
 
   packages/schema: {}
+
+  packages/skills:
+    dependencies:
+      '@agent-sdk/core':
+        specifier: workspace:*
+        version: link:../core
 
   packages/storage:
     dependencies:
