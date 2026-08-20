@@ -10,7 +10,7 @@ export interface ModelProviderOptions {
   provider?: string;
   model?: string;
   environment: Record<string, string | undefined>;
-  diagnosticLogger?: DiagnosticLogger;
+  debugLogger?: DiagnosticLogger;
 }
 export interface ResolvedModelProvider {
   provider: SupportedModelProvider;
@@ -47,7 +47,7 @@ export function createModelProvider(options: ModelProviderOptions): ResolvedMode
         baseUrl,
         authToken,
         model,
-        diagnosticLogger: options.diagnosticLogger,
+        debugLogger: options.debugLogger,
       }),
     };
   }

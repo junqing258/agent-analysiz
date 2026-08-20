@@ -10,6 +10,7 @@ import type {
 export type DiagnosticLogger = (stage: string, details?: Record<string, unknown>) => void;
 
 export interface AnthropicMessagesGatewayOptions {
+  debugLogger?: (message: string) => void;
   baseUrl: string;
   authToken: string;
   model: string;

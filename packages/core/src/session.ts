@@ -13,6 +13,7 @@ import type {
   ToolCall,
   ToolFailure,
   ToolResult,
+  TurnExtensionContext,
   TransportEvent,
 } from "./types.js";
 
@@ -56,6 +57,7 @@ export class AgentSession {
   private readonly messages: AgentMessage[] = [];
   private readonly contextManager: ContextManager;
   private readonly pendingPermissions = new Map<string, PendingPermission>();
+  private readonly memoryProposalTurns = new Map<string, string>();
   private active = false;
   private sequence = 0;
   state: SessionState = "idle";
@@ -99,6 +101,81 @@ export class AgentSession {
     pending.resolve(decision);
   }
 
+  /** Confirms a previously proposed memory and records an audit-only external operation. */
+  async confirmMemory(proposalId: string): Promise<void> {
+    const memory = this.options.memory;
+    if (!memory) throw new Error("Memory is not configured");
+    const access = { sessionId: this.sessionId, ...memory.access };
+    const record = await memory.store.confirm(proposalId, access);
+    if (memory.policy && (await memory.policy.evaluate({ action: "confirm", record, access })) === "deny")
+      throw new Error("Memory confirmation denied by policy");
+    if (memory.policy && (await memory.policy.evaluate({ action: "save", record, access })) === "deny")
+      throw new Error("Memory save denied by policy");
+    const saved = await memory.store.upsert(record, access);
+    await memory.store.reject(proposalId, access);
+    const relatedTurnId = this.memoryProposalTurns.get(proposalId) ?? record.source.sessionId;
+    await this.options.eventStore.append({
+      type: "memory.confirmed",
+      relatedTurnId,
+      at: now(),
+      operationId: `memory_op_${randomId()}`,
+      proposalId,
+      memoryId: saved.id,
+    });
+    await this.options.eventStore.append({
+      type: "memory.saved",
+      relatedTurnId,
+      at: now(),
+      operationId: `memory_op_${randomId()}`,
+      memoryId: saved.id,
+    });
+    this.memoryProposalTurns.delete(proposalId);
+  }
+  async rejectMemory(proposalId: string): Promise<void> {
+    const memory = this.options.memory;
+    if (!memory) throw new Error("Memory is not configured");
+    const relatedTurnId = this.memoryProposalTurns.get(proposalId) ?? this.sessionId;
+    await memory.store.reject(proposalId, { sessionId: this.sessionId, ...memory.access });
+    await this.options.eventStore.append({
+      type: "memory.rejected",
+      relatedTurnId,
+      at: now(),
+      operationId: `memory_op_${randomId()}`,
+      proposalId,
+    });
+    this.memoryProposalTurns.delete(proposalId);
+  }
+  async deleteMemory(id: string): Promise<void> {
+    const memory = this.options.memory;
+    if (!memory) throw new Error("Memory is not configured");
+    const access = { sessionId: this.sessionId, ...memory.access };
+    if (
+      memory.policy &&
+      (await memory.policy.evaluate({
+        action: "delete",
+        record: {
+          id,
+          binding: { scope: "session", sessionId: this.sessionId },
+          kind: "fact",
+          content: "",
+          tags: [],
+          source: { sessionId: this.sessionId },
+          createdAt: "",
+          updatedAt: "",
+        },
+        access,
+      })) === "deny"
+    )
+      throw new Error("Memory deletion denied by policy");
+    await memory.store.delete(id, access);
+    await this.options.eventStore.append({
+      type: "memory.deleted",
+      at: now(),
+      operationId: `memory_op_${randomId()}`,
+      memoryId: id,
+    });
+  }
+
   /** 返回当前会话已累积的消息历史，只读视图不允许替换消息数组。 */
   getMessages(): readonly AgentMessage[] {
     return this.messages;
@@ -116,28 +193,30 @@ export class AgentSession {
     const timeout = this.options.turnTimeoutMs
       ? setTimeout(() => controller.abort(new Error("turn timeout")), this.options.turnTimeoutMs)
       : undefined;
+    let turnId = `turn_${randomId()}`;
     try {
-      const turnId = `turn_${randomId()}`;
       await this.persist({ type: "turn.started", turnId, at: now() }, queue);
       await this.setState("building-context", queue);
       const user = typeof input === "string" ? message("user", [{ type: "text", text: input }]) : input;
       this.messages.push(user);
       await this.persist({ type: "message.appended", message: user }, queue);
 
+      const turnContext = await this.resolveExtensions(turnId, user, queue);
       for (let step = 0; step < this.options.maxSteps; step += 1) {
         throwIfAborted(controller.signal);
         await this.setState("streaming", queue);
-        const response = await this.collectModelResponse(controller.signal, queue);
+        const response = await this.collectModelResponse(controller.signal, queue, turnContext);
         if (response.calls.length === 0) {
           if (response.finish !== "stop") {
-            await this.interrupt(response.finish === "length" ? "step-limit" : "aborted", queue);
+            await this.interrupt(response.finish === "length" ? "step-limit" : "aborted", queue, turnId);
             return;
           }
           const assistant = message("assistant", response.text ? [{ type: "text", text: response.text }] : []);
           this.messages.push(assistant);
           await this.persist({ type: "message.appended", message: assistant }, queue);
           await this.setState("completed", queue);
-          await this.persist({ type: "turn.completed", messageId: assistant.id }, queue);
+          await this.persist({ type: "turn.completed", turnId, messageId: assistant.id }, queue);
+          await this.proposeMemories(turnId, queue);
           return;
         }
 
@@ -148,16 +227,16 @@ export class AgentSession {
         const assistant = message("assistant", content);
         this.messages.push(assistant);
         await this.persist({ type: "message.appended", message: assistant }, queue);
-        for (const call of response.calls) await this.executeCall(call, controller.signal, queue);
+        for (const call of response.calls) await this.executeCall(call, controller.signal, queue, turnContext);
         await this.setState("building-context", queue);
       }
-      await this.interrupt("step-limit", queue);
+      await this.interrupt("step-limit", queue, turnId);
     } catch (error) {
       if (controller.signal.aborted)
-        await this.interrupt(isTurnTimeout(controller.signal.reason) ? "turn-timeout" : "aborted", queue);
+        await this.interrupt(isTurnTimeout(controller.signal.reason) ? "turn-timeout" : "aborted", queue, turnId);
       else {
         await this.setState("failed", queue);
-        await this.persist({ type: "turn.failed", error: toAgentError(error) }, queue);
+        await this.persist({ type: "turn.failed", turnId, error: toAgentError(error) }, queue);
       }
     } finally {
       if (timeout) clearTimeout(timeout);
@@ -172,15 +251,18 @@ export class AgentSession {
   private async collectModelResponse(
     signal: AbortSignal,
     queue: AsyncQueue<TransportEvent>,
+    turnContext: TurnExtensionContext,
   ): Promise<{ text: string; calls: ToolCall[]; finish?: "stop" | "tool-use" | "length" }> {
     let text = "";
     const calls: ToolCall[] = [];
     let finish: "stop" | "tool-use" | "length" | undefined;
-    const tools = this.tools.definitions();
-    const prepared = await this.contextManager.prepare(this.messages, tools);
+    const tools = [...turnContext.effectiveTools];
+    const prepared = await this.contextManager.prepare(this.messages, turnContext.injectedMessages, tools);
     if (prepared.snapshot) {
       await this.setState("compacting", queue);
-      this.messages.splice(0, this.messages.length, ...prepared.messages);
+      // The prepared request also contains ephemeral extensions; only the compacted
+      // conversation snapshot is durable session history.
+      this.messages.splice(0, this.messages.length, ...prepared.snapshot.messages);
       await this.persist(
         { type: "context.compacted", snapshot: prepared.snapshot, replacesThroughSequence: this.sequence },
         queue,
@@ -202,11 +284,21 @@ export class AgentSession {
   }
 
   /** 记录工具请求、校验参数、执行调用，并把结果追加为工具消息。 */
-  private async executeCall(call: ToolCall, signal: AbortSignal, queue: AsyncQueue<TransportEvent>): Promise<void> {
+  private async executeCall(
+    call: ToolCall,
+    signal: AbortSignal,
+    queue: AsyncQueue<TransportEvent>,
+    turnContext: TurnExtensionContext,
+  ): Promise<void> {
     await this.persist({ type: "tool.requested", call }, queue);
     const tool = this.tools.get(call.name);
     let result: ToolResult;
     if (!tool) result = failure("TOOL_NOT_FOUND", `Unknown tool: ${call.name}`);
+    else if (!turnContext.effectiveTools.some((definition) => definition.name === call.name))
+      result = failure(
+        "TOOL_DISABLED_BY_SKILL",
+        `Active skills restrict ${call.name}. Visible tools: ${turnContext.effectiveTools.map((definition) => definition.name).join(", ") || "none"}`,
+      );
     else {
       const validation = validateJsonSchema(tool.inputSchema, call.input);
       result = validation.valid
@@ -332,13 +424,151 @@ export class AgentSession {
     };
   }
 
+  /** Resolves optional skills and memory exactly once at the start of a turn. */
+  private async resolveExtensions(
+    turnId: string,
+    user: AgentMessage,
+    queue: AsyncQueue<TransportEvent>,
+  ): Promise<TurnExtensionContext> {
+    const injectedMessages: TurnExtensionContext["injectedMessages"][number][] = [];
+    const activeSkills: TurnExtensionContext["activeSkills"][number][] = [];
+    let effectiveTools = this.tools.definitions();
+    const query =
+      user.role === "user"
+        ? user.content
+            .filter((part) => part.type === "text")
+            .map((part) => part.text)
+            .join("\n")
+            .trim()
+        : "";
+    if (this.options.skills) {
+      const catalog = await this.options.skills.list();
+      const maxChars = this.options.context?.skillCatalogMaxChars ?? 4_000;
+      let catalogueText = catalog
+        .map(
+          (skill) =>
+            `- ${skill.name}: ${skill.description}${skill.triggers?.length ? ` [${skill.triggers.join(", ")}]` : ""}`,
+        )
+        .join("\n");
+      const catalogTruncated = catalogueText.length > maxChars;
+      catalogueText = catalogueText.slice(0, maxChars);
+      if (catalogueText)
+        injectedMessages.push({ kind: "skill-catalog", role: "user", source: {}, content: catalogueText });
+      await this.persist(
+        {
+          type: "skill.catalog.presented",
+          turnId,
+          at: now(),
+          skills: catalog.map(({ name, version }) => ({ name, version })),
+          truncated: catalogTruncated,
+        },
+        queue,
+      );
+      const matched = query ? await this.options.skills.match(query, catalog) : [];
+      for (const metadata of matched) {
+        const explicit = new RegExp(`(^|\\s)/${escapeRegex(metadata.name)}(?=\\s|$)`, "i").test(query);
+        await this.persist(
+          { type: "skill.matched", turnId, at: now(), name: metadata.name, source: explicit ? "explicit" : "trigger" },
+          queue,
+        );
+        const skill = await this.options.skills.load(metadata.name);
+        if (!skill) continue;
+        activeSkills.push(skill);
+        injectedMessages.push({
+          kind: "skill-instructions",
+          role: "user",
+          source: { skillName: skill.name },
+          content: skill.instructions,
+        });
+        await this.persist(
+          {
+            type: "skill.loaded",
+            turnId,
+            at: now(),
+            name: skill.name,
+            version: skill.version,
+            contentHash: simpleHash(skill.instructions),
+          },
+          queue,
+        );
+      }
+      const limited = activeSkills.filter((skill) => skill.allowedTools !== undefined);
+      if (limited.length) {
+        const allowed = new Set(limited.flatMap((skill) => skill.allowedTools ?? []));
+        effectiveTools = effectiveTools.filter((tool) => allowed.has(tool.name));
+      }
+    }
+    const retrievedMemories: TurnExtensionContext["retrievedMemories"][number][] = [];
+    if (this.options.memory && query) {
+      const access = { sessionId: this.sessionId, ...this.options.memory.access };
+      const scopes = this.options.memory.scopes ?? ["session", "project", "user"];
+      const found = await this.options.memory.store.search(query, {
+        scopes,
+        limit: this.options.memory.searchLimit ?? 8,
+        access,
+      });
+      retrievedMemories.push(...found);
+      if (found.length)
+        injectedMessages.push({
+          kind: "memory",
+          role: "user",
+          source: { memoryIds: found.map((record) => record.id) },
+          content: found
+            .map(
+              (record) =>
+                `Memory ${record.id} (${record.kind}; source session ${record.source.sessionId}): ${record.content}`,
+            )
+            .join("\n"),
+        });
+      await this.persist(
+        {
+          type: "memory.retrieved",
+          turnId,
+          at: now(),
+          queryPresent: true,
+          memoryIds: found.map((record) => record.id),
+        },
+        queue,
+      );
+    }
+    return { activeSkills, retrievedMemories, effectiveTools, injectedMessages };
+  }
+
+  private async proposeMemories(turnId: string, queue: AsyncQueue<TransportEvent>): Promise<void> {
+    if (!this.options.memory?.extractor) return;
+    const access = { sessionId: this.sessionId, ...this.options.memory.access };
+    const scopes = this.options.memory.scopes ?? ["session"];
+    for (const record of await this.options.memory.extractor.extract({
+      turnId,
+      messages: this.messages,
+      access,
+      scopes,
+    })) {
+      if (
+        this.options.memory.policy &&
+        (await this.options.memory.policy.evaluate({ action: "propose", record, access })) === "deny"
+      )
+        continue;
+      const proposal = await this.options.memory.store.propose(
+        { id: `proposal_${randomId()}`, record, sourceTurnId: turnId, createdAt: now() },
+        access,
+      );
+      this.memoryProposalTurns.set(proposal.id, turnId);
+      await this.persist(
+        { type: "memory.proposed", turnId, at: now(), proposalId: proposal.id, kind: proposal.record.kind },
+        queue,
+      );
+    }
+  }
+
   /** 将当前回合标记为中断，并持久化中断原因。 */
   private async interrupt(
     reason: "aborted" | "permission-timeout" | "step-limit" | "turn-timeout",
     queue: AsyncQueue<TransportEvent>,
+    turnId: string,
   ): Promise<void> {
     await this.setState("interrupted", queue);
-    await this.persist({ type: "turn.interrupted", reason }, queue);
+    await this.persist({ type: "turn.interrupted", turnId, reason }, queue);
   }
   /** 更新内存状态并写入对应的状态变更事件。 */
   private async setState(state: SessionState, queue: AsyncQueue<TransportEvent>): Promise<void> {
@@ -351,6 +581,15 @@ export class AgentSession {
     this.sequence = stored.sequence;
     queue.push(event);
   }
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+function simpleHash(value: string): string {
+  let hash = 5381;
+  for (let i = 0; i < value.length; i += 1) hash = (hash * 33) ^ value.charCodeAt(i);
+  return (hash >>> 0).toString(16);
 }
 
 /** 创建带唯一标识和时间戳的会话消息。 */

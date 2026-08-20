@@ -190,9 +190,54 @@ export type DurableEvent =
   | { type: "tool.completed"; callId: string; result: ToolResult }
   | { type: "context.compacted"; snapshot: ContextSnapshot; replacesThroughSequence: number }
   | { type: "session.state.changed"; state: SessionState }
-  | { type: "turn.completed"; messageId: string }
-  | { type: "turn.interrupted"; reason: InterruptReason }
-  | { type: "turn.failed"; error: AgentError };
+  | { type: "turn.completed"; turnId: string; messageId: string }
+  | { type: "turn.interrupted"; turnId: string; reason: InterruptReason }
+  | { type: "turn.failed"; turnId: string; error: AgentError }
+  | {
+      type: "skill.catalog.presented";
+      turnId: string;
+      at: string;
+      skills: Array<{ name: string; version?: string }>;
+      truncated?: boolean;
+    }
+  | { type: "skill.matched"; turnId: string; at: string; name: string; source: "explicit" | "trigger" }
+  | {
+      type: "skill.loaded";
+      turnId: string;
+      at: string;
+      name: string;
+      version?: string;
+      contentHash: string;
+      truncated?: boolean;
+    }
+  | {
+      type: "memory.retrieved";
+      turnId: string;
+      at: string;
+      queryPresent: boolean;
+      memoryIds: string[];
+      truncated?: boolean;
+    }
+  | { type: "memory.proposed"; turnId: string; at: string; proposalId: string; kind: MemoryRecord["kind"] }
+  | {
+      type: "memory.confirmed";
+      relatedTurnId: string;
+      at: string;
+      operationId: string;
+      proposalId: string;
+      memoryId: string;
+    }
+  | { type: "memory.rejected"; relatedTurnId: string; at: string; operationId: string; proposalId: string }
+  | { type: "memory.saved"; relatedTurnId: string; at: string; operationId: string; memoryId: string }
+  | {
+      type: "memory.deleted";
+      relatedTurnId?: string;
+      at: string;
+      operationId: string;
+      memoryId?: string;
+      scope?: MemoryRecord["binding"]["scope"];
+      count?: number;
+    };
 /** 发给调用方的事件，包含持久化事件及不持久化的实时增量。 */
 export type TransportEvent =
   | DurableEvent
@@ -221,6 +266,90 @@ export interface ContextOptions {
   contextWindowTokens?: number;
   maxOutputTokens?: number;
   retainRecentMessages?: number;
+  extensionBudgetTokens?: number;
+  skillCatalogMaxChars?: number;
+}
+export interface SkillMetadata {
+  name: string;
+  description: string;
+  triggers?: string[];
+  allowedTools?: string[];
+  version?: string;
+  root: string;
+}
+export interface Skill extends SkillMetadata {
+  instructions: string;
+}
+export interface SkillProvider {
+  list(): Promise<ReadonlyArray<SkillMetadata>>;
+  match(input: string, skills: ReadonlyArray<SkillMetadata>): Promise<ReadonlyArray<SkillMetadata>>;
+  load(name: string): Promise<Skill | undefined>;
+}
+export interface MemoryRecord {
+  id: string;
+  binding:
+    | { scope: "session"; sessionId: string }
+    | { scope: "project"; workspaceId: string }
+    | { scope: "user"; userId: string };
+  kind: "fact" | "preference" | "decision" | "feedback";
+  content: string;
+  tags: string[];
+  source: { sessionId: string; messageId?: string };
+  createdAt: string;
+  updatedAt: string;
+  expiresAt?: string;
+}
+export interface MemoryAccessContext {
+  sessionId: string;
+  workspaceId?: string;
+  userId?: string;
+}
+export interface MemorySearchOptions {
+  scopes: MemoryRecord["binding"]["scope"][];
+  limit: number;
+  access: MemoryAccessContext;
+}
+export interface MemoryProposal {
+  id: string;
+  record: Omit<MemoryRecord, "id" | "createdAt" | "updatedAt">;
+  sourceTurnId: string;
+  createdAt: string;
+}
+export interface MemoryStore {
+  search(query: string, options: MemorySearchOptions): Promise<ReadonlyArray<MemoryRecord>>;
+  propose(proposal: MemoryProposal, access: MemoryAccessContext): Promise<MemoryProposal>;
+  confirm(proposalId: string, access: MemoryAccessContext): Promise<MemoryRecord>;
+  reject(proposalId: string, access: MemoryAccessContext): Promise<void>;
+  upsert(record: MemoryRecord, access: MemoryAccessContext): Promise<MemoryRecord>;
+  delete(id: string, access: MemoryAccessContext): Promise<void>;
+  deleteScope(scope: MemoryRecord["binding"]["scope"], access: MemoryAccessContext): Promise<number>;
+}
+export interface MemoryPolicy {
+  evaluate(input: {
+    action: "propose" | "confirm" | "save" | "delete";
+    record: Omit<MemoryRecord, "id" | "createdAt" | "updatedAt"> | MemoryRecord;
+    access: MemoryAccessContext;
+  }): Promise<"allow" | "deny">;
+}
+export interface MemoryExtractor {
+  extract(input: {
+    turnId: string;
+    messages: ReadonlyArray<AgentMessage>;
+    access: MemoryAccessContext;
+    scopes: MemoryRecord["binding"]["scope"][];
+  }): Promise<ReadonlyArray<Omit<MemoryRecord, "id" | "createdAt" | "updatedAt">>>;
+}
+export interface InjectedContextMessage {
+  kind: "skill-catalog" | "skill-instructions" | "memory";
+  role: "user";
+  source: { skillName?: string; memoryIds?: string[] };
+  content: string;
+}
+export interface TurnExtensionContext {
+  activeSkills: ReadonlyArray<Skill>;
+  retrievedMemories: ReadonlyArray<MemoryRecord>;
+  effectiveTools: ReadonlyArray<ModelToolDefinition>;
+  injectedMessages: ReadonlyArray<InjectedContextMessage>;
 }
 /**
  * 创建 Agent 会话所需的依赖与运行配置；`model` 和 `eventStore` 为必填，
@@ -241,4 +370,13 @@ export interface AgentSessionOptions {
   toolTimeoutMs?: number;
   turnTimeoutMs?: number;
   maxToolResultChars?: number;
+  skills?: SkillProvider;
+  memory?: {
+    store: MemoryStore;
+    extractor?: MemoryExtractor;
+    policy?: MemoryPolicy;
+    access?: Omit<MemoryAccessContext, "sessionId">;
+    scopes?: MemoryRecord["binding"]["scope"][];
+    searchLimit?: number;
+  };
 }

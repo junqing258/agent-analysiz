@@ -25,15 +25,15 @@ async function main(): Promise<void> {
     file: options.envFile,
     startDirectory: workspace,
   });
-  const diagnosticLogger = createDiagnosticLogger(options.debug || isDebugEnabled(env.SIMPLE_CHAT_DEBUG));
+  const debugLogger = createDiagnosticLogger(options.debug || isDebugEnabled(env.SIMPLE_CHAT_DEBUG));
   const modelProvider = createModelProvider({
     provider: options.provider,
     model: options.model,
     environment: env,
-    diagnosticLogger,
+    debugLogger: debugLogger,
   });
   const gateway: ModelGateway = modelProvider.gateway;
-  diagnosticLogger?.("cli.configuration", {
+  debugLogger?.("cli.configuration", {
     provider: modelProvider.provider,
     model: modelProvider.model,
     loadedEnv,
@@ -63,7 +63,7 @@ async function main(): Promise<void> {
     session,
     providerLabel,
     resumedMessages: recovered.messages.length,
-    diagnosticLogger,
+    debugLogger: debugLogger,
   }).start();
 }
 function parseArgs(args: string[]): CliOptions {

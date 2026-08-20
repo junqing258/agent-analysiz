@@ -15,7 +15,7 @@ export interface TerminalChatOptions {
   session: AgentSession;
   providerLabel: string;
   resumedMessages: number;
-  diagnosticLogger?: DiagnosticLogger;
+  debugLogger?: DiagnosticLogger;
 }
 
 /** React-powered Ink chat interface for one persistent AgentSession. */
@@ -178,7 +178,7 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
           setStatus(`Approval required: ${event.request.tool}`);
         } else if (event.type === "session.state.changed") {
           setStatus(statusForState(event.state));
-          options.diagnosticLogger?.("agent.event", {
+          options.debugLogger?.("agent.event", {
             type: event.type,
             state: event.state,
           });
@@ -188,7 +188,7 @@ function ChatApp({ options }: { options: TerminalChatOptions }): React.JSX.Eleme
         } else if (event.type === "turn.interrupted") {
           setStatus(`Turn interrupted: ${event.reason}`);
         } else {
-          options.diagnosticLogger?.("agent.event", { type: event.type });
+          options.debugLogger?.("agent.event", { type: event.type });
         }
       }
       setMessages((current) => replaceEmptyMessage(current, assistantId, "(No text response.)"));

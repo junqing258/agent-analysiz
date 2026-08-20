@@ -3,7 +3,7 @@
   "private": true,
   "packageManager": "pnpm@10.12.1",
   "scripts": {
-    "build": "tsc -b && tsc -p packages/schema/tsconfig.cjs.json && tsc -p packages/core/tsconfig.cjs.json && tsc -p packages/model-gateway/tsconfig.cjs.json && tsc -p packages/storage/tsconfig.cjs.json && tsc -p packages/node-executor/tsconfig.cjs.json && for pkg in schema core model-gateway storage node-executor; do mkdir -p packages/$pkg/dist/cjs; cp packages/cjs-package.json packages/$pkg/dist/cjs/package.json; done",
+    "build": "tsc -b && tsc -p packages/schema/tsconfig.cjs.json && tsc -p packages/core/tsconfig.cjs.json && tsc -p packages/skills/tsconfig.cjs.json && tsc -p packages/memory/tsconfig.cjs.json && tsc -p packages/model-gateway/tsconfig.cjs.json && tsc -p packages/storage/tsconfig.cjs.json && tsc -p packages/node-executor/tsconfig.cjs.json && for pkg in schema core skills memory model-gateway storage node-executor; do mkdir -p packages/$pkg/dist/cjs; cp packages/cjs-package.json packages/$pkg/dist/cjs/package.json; done",
     "clean": "tsc -b --clean",
     "test": "pnpm build && node --test tests/**/*.test.mjs",
     "typecheck": "tsc -b --pretty false",

@@ -1,0 +1,18 @@
+{
+  "name": "@agent-sdk/memory",
+  "version": "0.1.0",
+  "type": "module",
+  "dependencies": {
+    "@agent-sdk/core": "workspace:*"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ]
+}
